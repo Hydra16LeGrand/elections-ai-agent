@@ -1,0 +1,35 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16  # Image Postgres officielle incluant pgvector
+    environment:
+      POSTGRES_USER: artefact_user
+      POSTGRES_PASSWORD: artefact_password
+      POSTGRES_DB: elections_db
+    ports:
+      - "5433:5432" # Pour que tu puisses inspecter la DB depuis ton PC (DBeaver, pgAdmin)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@artefact.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80" # Tu accèderas à pgAdmin via http://localhost:8080
+    depends_on:
+      - db
+
+  ingestion:
+    build: .
+    volumes:
+      - .:/app
+    command: ["python", "ingestion/ingest.py"]
+    depends_on:
+      - db # S'assure que la DB démarre avant le script Python
+    environment:
+      # URL de connexion pour SQLAlchemy
+      DATABASE_URL: postgresql://artefact_user:artefact_password@db:5432/elections_db
+
+volumes:
+  postgres_data:

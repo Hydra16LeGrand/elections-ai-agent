@@ -1,0 +1,6 @@
+camelot-py[cv]
+pandas
+opencv-python-headless
+pdfminer.six
+SQLAlchemy
+psycopg2-binary
