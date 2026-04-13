@@ -1,9 +1,9 @@
 import os
 import re
 import json
-from openai import OpenAI
 from sqlalchemy import create_engine, text
-from dotenv import load_dotenv # <-- Pour test en local
+from ollama import Client
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -11,20 +11,18 @@ load_dotenv()
 # CONFIGURATION ET INITIALISATION
 # =====================================================================================
 
-# client = OpenAI(
-#     base_url="https://ollama.com/api/v1",
-#     api_key=os.environ.get("OLLAMA_API_KEY", "ollama_placeholder_key")
-# )
-
-from ollama import Client
-
 client = Client(
     host="https://ollama.com",
     headers={'Authorization': f"Bearer {os.environ.get('OLLAMA_API_KEY')}"}
 )
 
-# Modèle "Coder" spécifiquement optimisé pour le SQL et le raisonnement logique
-MODEL_NAME = "qwen3-coder-next" # Ou qwen3-coder-next selon ta disponibilité sur Ollama Cloud
+# =====================================================================================
+# CONFIGURATION DES MODÈLES (Architecture Dual-Modèle)
+# =====================================================================================
+# Modèle principal pour le SQL (qualité de code, structure rigoureuse)
+MODEL_SQL = "qwen3-coder-next"
+# Modèle rapide pour la synthèse narrative et le choix de visualisation
+MODEL_FAST = "mixtral-8x7b"
 
 # BONUS A : Connexion DB en readonly (user Postgres dédié)
 DB_URL = os.environ.get(
@@ -80,12 +78,11 @@ SQL: SELECT region, SUM(votants) * 100.0 / SUM(inscrits) as taux FROM vw_turnout
 
 def apply_guardrails(sql_query: str) -> tuple[bool, str, str]:
     """Applique les règles de sécurité strictes sur la requête générée."""
-    
+
     # CORRECTION DE ROBUSTESSE : Retirer les espaces et le point-virgule final
-    # Cela évite de générer des requêtes cassées du type "SELECT * FROM table; LIMIT 100"
     sql_query = sql_query.strip().rstrip(';')
     sql_upper = sql_query.upper()
-    
+
     # 1. Blocage des mots interdits
     forbidden = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", "GRANT", "REVOKE"]
     if any(keyword in sql_upper for keyword in forbidden):
@@ -96,10 +93,13 @@ def apply_guardrails(sql_query: str) -> tuple[bool, str, str]:
     if not any(view in sql_upper for view in allowed_views) or "RAW_ELECTION_DATA" in sql_upper:
         return False, sql_query, "Violation de l'Allowlist : Table non autorisée."
 
-    # 3. Enforcement automatique du LIMIT
-    if "LIMIT " not in sql_upper:
+    # 3. Enforcement automatique du LIMIT (sauf sur requêtes d'agrégation)
+    aggregation_keywords = ["SUM(", "AVG(", "COUNT(", "MIN(", "MAX(", "GROUP BY"]
+    is_aggregation = any(agg in sql_upper for agg in aggregation_keywords)
+
+    if "LIMIT " not in sql_upper and not is_aggregation:
         sql_query = f"{sql_query} LIMIT 100"
-        
+
     return True, sql_query, ""
 
 # =====================================================================================
@@ -122,20 +122,10 @@ def execute_sql(sql_query: str) -> tuple[list, str]:
 def analyze_intent(question: str) -> dict:
     """Utilise l'IA pour classifier l'intention de l'utilisateur."""
     try:
-        # response = client.chat.completions.create(
-        #     model=MODEL_NAME,
-        #     messages=[
-        #         {"role": "system", "content": ROUTER_PROMPT},
-        #         {"role": "user", "content": question}
-        #     ],
-        #     temperature=0.0
-        # )
-        # content = response.choices[0].message.content.strip()
-        # NOUVELLE VERSION OLLAMA CLOUD
         response = client.chat(
-            model=MODEL_NAME,
+            model=MODEL_SQL,
             messages=[
-                {"role": "system", "content": ROUTER_PROMPT}, # Exemple pour le routeur
+                {"role": "system", "content": ROUTER_PROMPT},
                 {"role": "user", "content": question}
             ],
             options={"temperature": 0.0}
@@ -146,6 +136,72 @@ def analyze_intent(question: str) -> dict:
         return json.loads(clean_json)
     except Exception:
         return {"intent": "valid", "reasoning": "Fallback on error"}
+
+
+def synthesize_and_choose_chart(question: str, data: list, sql: str) -> dict:
+    """
+    Utilise un modèle rapide pour générer la synthèse narrative ET choisir le type de graphique.
+    Réduit les appels LLM en fusionnant deux tâches.
+    """
+    if not data or len(data) == 0:
+        return {
+            "narrative": "Aucune donnée trouvée pour cette requête.",
+            "chart_type": "table"
+        }
+
+    # Analyse des colonnes
+    sample_row = data[0] if data else {}
+    columns = list(sample_row.keys())
+    num_rows = len(data)
+
+    # Détection heuristique pour le choix de chart (fallback si LLM échoue)
+    numeric_cols = [col for col in columns if isinstance(sample_row.get(col), (int, float))]
+    string_cols = [col for col in columns if isinstance(sample_row.get(col), str)]
+
+    prompt = f"""Question utilisateur: {question}
+
+Données extraites ({num_rows} lignes):
+Colonnes: {columns}
+Colonnes numériques: {numeric_cols}
+Colonnes textuelles: {string_cols}
+
+Premier exemple: {json.dumps(sample_row, indent=2, default=str)}
+
+Ta tâche:
+1. Formule une réponse naturelle, courte et en français basée STRICTEMENT sur ces données.
+2. Choisis le meilleur type de graphique parmi: bar, pie, line, scatter, table.
+
+Réponds UNIQUEMENT avec ce format JSON:
+{{"narrative": "ta réponse ici", "chart_type": "bar|pie|line|scatter|table"}}"""
+
+    try:
+        response = client.chat(
+            model=MODEL_FAST,
+            messages=[{"role": "user", "content": prompt}],
+            options={"temperature": 0.1}
+        )
+        content = response['message']['content'].strip()
+        # Nettoyage JSON
+        clean_json = re.sub(r"^```json|```$", "", content, flags=re.MULTILINE).strip()
+        result = json.loads(clean_json)
+
+        # Validation
+        valid_types = ["bar", "pie", "line", "scatter", "table"]
+        chart_type = result.get("chart_type", "table").lower()
+        if chart_type not in valid_types:
+            chart_type = "table"
+
+        return {
+            "narrative": result.get("narrative", "Données extraites avec succès."),
+            "chart_type": chart_type
+        }
+    except Exception:
+        # Fallback sur heuristique simple
+        chart_type = "bar" if num_rows > 1 and len(numeric_cols) > 0 and len(string_cols) > 0 else "table"
+        return {
+            "narrative": "Données extraites avec succès.",
+            "chart_type": chart_type
+        }
 
 # =====================================================================================
 # ORCHESTRATEUR PRINCIPAL (L'AGENT)
@@ -186,18 +242,16 @@ def ask_database(user_question: str) -> dict:
         }
 
     # 2. Boucle ReAct (Self-Correction) pour la génération SQL
-    # 2. Boucle ReAct (Self-Correction) pour la génération SQL
     error_feedback = ""
     for attempt in range(3):
-        print(f"\n🔄 --- Tentative {attempt + 1}/3 ---") # DEBUG
         prompt = f"Question: {user_question}\n"
         if error_feedback:
             prompt += f"ATTENTION. Ta précédente requête a échoué : {error_feedback}. Corrige-la."
-            
+
         try:
-            # Appel LLM
+            # Appel LLM avec modèle SQL (qualité)
             response = client.chat(
-                model=MODEL_NAME,
+                model=MODEL_SQL,
                 messages=[
                     {"role": "system", "content": SCHEMA_CONTEXT},
                     {"role": "user", "content": prompt}
@@ -206,59 +260,38 @@ def ask_database(user_question: str) -> dict:
             )
             raw_sql = response['message']['content'].strip()
             raw_sql = re.sub(r"^```sql|```$", "", raw_sql, flags=re.MULTILINE).strip()
-            
-            # print(f"🤖 [DEBUG] SQL Généré : {raw_sql}") # DEBUG
-            
+
             # Guardrails
             is_safe, final_sql, guardrail_error = apply_guardrails(raw_sql)
             if not is_safe:
                 error_feedback = guardrail_error
-                print(f"🛡️ [DEBUG] Bloqué par Guardrail : {guardrail_error}") # DEBUG
                 continue
 
             # Exécution DB
             data, db_error = execute_sql(final_sql)
             if db_error:
                 error_feedback = db_error
-                print(f"🗄️ [DEBUG] Erreur Base de données : {db_error}") # DEBUG
                 continue
-                
-            # SUCCÈS
-            # print("✅ [DEBUG] Exécution SQL réussie !") # DEBUG
-            synthesis_prompt = f"""
-Question de l'utilisateur : {user_question}
-Données extraites de la base de données (VÉRITÉ ABSOLUE) : {data}
 
-RÈGLES STRICTES :
-1. Formule une réponse naturelle, courte et en français.
-2. Base-toi STRICTEMENT et UNIQUEMENT sur les données fournies ci-dessus. N'utilise JAMAIS tes connaissances générales (pas de définitions historiques ou Wikipédia).
-3. Si les données fournies sont vides, dis simplement que la base de données ne contient pas l'information.
-"""
-            
-            synth_response = client.chat(
-                model=MODEL_NAME,
-                messages=[{"role": "user", "content": synthesis_prompt}],
-                options={"temperature": 0.1} # Température très basse pour éviter la créativité
-            )
-            narrative = synth_response['message']['content'].strip()
-            
+            # SUCCÈS - Synthèse et choix de chart en un seul appel (modèle rapide)
+            synthesis_result = synthesize_and_choose_chart(user_question, data, final_sql)
+
             return {
                 "status": "success",
-                "narrative": narrative,
+                "narrative": synthesis_result["narrative"],
                 "data": data,
-                "sql": final_sql
+                "sql": final_sql,
+                "chart_type": synthesis_result["chart_type"]
             }
-            
+
         except Exception as e:
             error_feedback = f"Erreur API: {str(e)}"
-            print(f"⚠️ [DEBUG] Erreur API : {error_feedback}") # DEBUG
 
-    # Échec après 3 tentatives
     # Échec après 3 tentatives
     return {
         "status": "error",
         "narrative": "Désolé, je n'ai pas pu formuler une requête valide pour cette question complexe.",
-        "data": [], "sql": ""
+        "data": [], "sql": "", "chart_type": "table"
     }
 
 # =====================================================================================

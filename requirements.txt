@@ -1,6 +1,11 @@
 camelot-py[cv]
 pandas
+numpy
 opencv-python-headless
 pdfminer.six
 SQLAlchemy
 psycopg2-binary
+python-dotenv
+ollama
+streamlit
+plotly

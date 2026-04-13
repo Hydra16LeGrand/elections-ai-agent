@@ -14,5 +14,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Commande par défaut (on pourra la surcharger dans le docker-compose)
-CMD ["python", "ingestion/ingest.py"]
+# Exposition du port Streamlit
+EXPOSE 8501
+
+# Healthcheck pour Streamlit
+HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
+
+# Commande par défaut : lancer l'interface Streamlit
+CMD ["streamlit", "run", "app/ui.py", "--server.port=8501", "--server.address=0.0.0.0"]

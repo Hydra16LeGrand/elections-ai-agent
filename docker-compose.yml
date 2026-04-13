@@ -1,14 +1,19 @@
 services:
   db:
-    image: pgvector/pgvector:pg16  # Image Postgres officielle incluant pgvector
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: artefact_user
       POSTGRES_PASSWORD: artefact_password
       POSTGRES_DB: elections_db
     ports:
-      - "5433:5432" # Pour que tu puisses inspecter la DB depuis ton PC (DBeaver, pgAdmin)
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U artefact_user -d elections_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   pgadmin:
     image: dpage/pgadmin4
@@ -16,20 +21,38 @@ services:
       PGADMIN_DEFAULT_EMAIL: admin@artefact.com
       PGADMIN_DEFAULT_PASSWORD: admin
     ports:
-      - "8080:80" # Tu accèderas à pgAdmin via http://localhost:8080
+      - "8080:80"
     depends_on:
       - db
 
   ingestion:
     build: .
-    volumes:
-      - .:/app
     command: ["python", "ingestion/ingest.py"]
     depends_on:
-      - db # S'assure que la DB démarre avant le script Python
+      db:
+        condition: service_healthy
     environment:
-      # URL de connexion pour SQLAlchemy
       DATABASE_URL: postgresql://artefact_user:artefact_password@db:5432/elections_db
+    volumes:
+      - ./ingestion:/app/ingestion
+      - ./source_files:/app/source_files
+
+  ui:
+    build: .
+    ports:
+      - "8501:8501"
+    depends_on:
+      - ingestion
+    environment:
+      AGENT_DB_URL: postgresql://artefact_reader:reader_password@db:5432/elections_db
+      OLLAMA_API_KEY: ${OLLAMA_API_KEY}
+    volumes:
+      - ./app:/app/app
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   postgres_data:
