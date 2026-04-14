@@ -5,7 +5,14 @@ from sqlalchemy import create_engine, text
 from ollama import Client
 from dotenv import load_dotenv
 
+# Imports Level 2: Hybrid Router et Entity Resolution
+from .hybrid_router import route_with_fallback, classify_question
+from .entity_resolver import EntityResolver, get_resolver
+
 load_dotenv()
+
+# Instance singleton du résolveur d'entités
+entity_resolver = get_resolver()
 
 # =====================================================================================
 # CONFIGURATION ET INITIALISATION
@@ -17,12 +24,11 @@ client = Client(
 )
 
 # =====================================================================================
-# CONFIGURATION DES MODÈLES (Architecture Dual-Modèle)
+# CONFIGURATION DES MODÈLES
 # =====================================================================================
-# Modèle principal pour le SQL (qualité de code, structure rigoureuse)
+# Modèle unique utilisé pour toutes les tâches (SQL, synthèse, classification)
+# Note: mixtral-8x7b n'est pas disponible sur Ollama Cloud, on utilise qwen3-coder-next
 MODEL_SQL = "qwen3-coder-next"
-# Modèle rapide pour la synthèse narrative et le choix de visualisation
-MODEL_FAST = "mixtral-8x7b"
 
 # BONUS A : Connexion DB en readonly (user Postgres dédié)
 DB_URL = os.environ.get(
@@ -67,10 +73,6 @@ SQL: SELECT candidat, parti FROM vw_winners WHERE nom_circonscription ILIKE '%AG
 Q: "Participation rate by region"
 SQL: SELECT region, SUM(votants) * 100.0 / SUM(inscrits) as taux FROM vw_turnout GROUP BY region;
 """
-
-# =====================================================================================
-# FONCTIONS DE SÉCURITÉ (GUARDRAILS - BONUS A)
-# =====================================================================================
 
 # =====================================================================================
 # FONCTIONS DE SÉCURITÉ (GUARDRAILS - BONUS A)
@@ -140,7 +142,7 @@ def analyze_intent(question: str) -> dict:
 
 def synthesize_and_choose_chart(question: str, data: list, sql: str) -> dict:
     """
-    Utilise un modèle rapide pour générer la synthèse narrative ET choisir le type de graphique.
+    Génère la synthèse narrative ET choisit le type de graphique.
     Réduit les appels LLM en fusionnant deux tâches.
     """
     if not data or len(data) == 0:
@@ -176,7 +178,7 @@ Réponds UNIQUEMENT avec ce format JSON:
 
     try:
         response = client.chat(
-            model=MODEL_FAST,
+            model=MODEL_SQL,
             messages=[{"role": "user", "content": prompt}],
             options={"temperature": 0.1}
         )
@@ -293,6 +295,76 @@ def ask_database(user_question: str) -> dict:
         "narrative": "Désolé, je n'ai pas pu formuler une requête valide pour cette question complexe.",
         "data": [], "sql": "", "chart_type": "table"
     }
+
+
+# =====================================================================================
+# HYBRID ROUTER - LEVEL 2
+# =====================================================================================
+
+def ask_hybrid(user_question: str) -> dict:
+    """
+    Point d'entrée hybride (Level 2).
+
+    Orchestration complète :
+    1. Pré-traitement : Fuzzy matching pour corriger les entités
+    2. Classification : Route SQL vs RAG vs Clarification
+    3. Exécution : Appelle le bon moteur selon la route
+
+    Args:
+        user_question: Question en langage naturel
+
+    Returns:
+        Réponse structurée (status, narrative, data, sql, chart_type, route)
+    """
+    # ÉTAPE 1: Résolution d'entités (fuzzy matching)
+    # Ex: "Tiapam" → "Tiapoum"
+    corrected_question, entity_metadata = entity_resolver.resolve_question(user_question)
+
+    if entity_metadata["replacements"]:
+        print(f"🔄 [Entity Resolver] Corrections: {entity_metadata['replacements']}")
+
+    # ÉTAPE 2: Classification (SQL vs RAG)
+    routing_result = route_with_fallback(corrected_question)
+
+    # CAS A: Clarification nécessaire
+    if routing_result["route"] == "clarification":
+        return {
+            "status": "clarification",
+            "narrative": routing_result["clarification_question"],
+            "data": [],
+            "sql": "",
+            "chart_type": "table",
+            "route": "clarification",
+            "confidence": routing_result["confidence"]
+        }
+
+    # CAS B: Route SQL
+    if routing_result["route"] == "sql":
+        result = ask_database(corrected_question)
+        result["route"] = "sql"
+        result["confidence"] = routing_result["confidence"]
+        return result
+
+    # CAS C: Route RAG (placeholder pour Étape 3)
+    if routing_result["route"] == "rag":
+        # TODO: Appeler le moteur RAG quand il sera implémenté
+        # Pour l'instant, fallback sur SQL avec message informatif
+        result = ask_database(corrected_question)
+        result["route"] = "rag_fallback"
+        result["confidence"] = routing_result["confidence"]
+        result["narrative"] = f"[Route RAG demandée - En cours d'implémentation]\n\n{result['narrative']}"
+        return result
+
+    # Fallback sécurisé
+    return {
+        "status": "error",
+        "narrative": "Je n'ai pas compris votre question. Pouvez-vous reformuler ?",
+        "data": [],
+        "sql": "",
+        "chart_type": "table",
+        "route": "error"
+    }
+
 
 # =====================================================================================
 # BLOC DE TEST LOCAL (INTERACTIF & DEBUG)
