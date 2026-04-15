@@ -1,11 +1,4 @@
-"""
-Module RAG avec LlamaIndex pour le système hybride.
-
-Utilise Gemini Embeddings avec retry et fallback si API indisponible.
-
-TODO: Le fallback MD5 est temporaire - à remplacer par un vrai modèle local
-si Gemini devient trop instable en production.
-"""
+"""Module RAG avec LlamaIndex pour le système hybride."""
 
 import os
 import json
@@ -17,30 +10,22 @@ from sqlalchemy import create_engine, text
 from ollama import Client
 from dotenv import load_dotenv
 
-# LlamaIndex imports
 from llama_index.core import Document, VectorStoreIndex, Settings
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.embeddings import BaseEmbedding
 from pydantic import PrivateAttr
 
-# Google GenAI (nouveau package)
 from google import genai
 from google.genai import types
 
 load_dotenv()
 
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
-
 OLLAMA_HOST = "https://ollama.com"
 MODEL_RAG = "qwen3-coder-next"
 
-# Configuration retry
 MAX_RETRIES = 3
-RETRY_DELAY = 1  # secondes
+RETRY_DELAY = 1
 
-# Client Ollama avec gestion d'erreur
 try:
     client = Client(
         host=OLLAMA_HOST,
@@ -51,16 +36,8 @@ except Exception as e:
     logging.warning(f"Impossible de connecter Ollama client: {e}")
     client = None
 
-
-# =============================================================================
-# GEMINI EMBEDDINGS (Resilient avec Retry)
-# =============================================================================
-
 class GeminiEmbedding(BaseEmbedding):
-    """
-    Wrapper Gemini Embeddings avec retry et fallback.
-    Compatible LlamaIndex.
-    """
+    """Wrapper Gemini Embeddings avec retry et fallback."""
     _client: genai.Client = PrivateAttr()
     _model_name: str = PrivateAttr()
     _fallback_mode: bool = PrivateAttr(default=False)
@@ -79,10 +56,8 @@ class GeminiEmbedding(BaseEmbedding):
     def _embed_with_retry(self, text: str, task_type: str) -> List[float]:
         """Embedding avec retry et backoff exponentiel."""
         if self._fallback_mode:
-            # Fallback: embedding aléatoire (permet de continuer sans casser)
             import hashlib
             hash_val = hashlib.md5(text.encode()).hexdigest()
-            # Génère un vecteur de dimension 768 normalisé
             embedding = [(int(hash_val[i:i+2], 16) / 255.0) - 0.5 for i in range(0, 1536, 2)]
             return embedding[:768]
 
@@ -98,21 +73,18 @@ class GeminiEmbedding(BaseEmbedding):
             except Exception as e:
                 last_error = e
                 error_msg = str(e)
-                # Ne pas retry sur les erreurs client (4xx)
                 if "400" in error_msg or "401" in error_msg or "403" in error_msg or "404" in error_msg:
                     raise
-                # Retry avec backoff exponentiel pour 5xx
                 if attempt < MAX_RETRIES - 1:
                     wait_time = RETRY_DELAY * (2 ** attempt)
                     import logging
                     logging.warning(f"Gemini API erreur (tentative {attempt + 1}/{MAX_RETRIES}): {e}")
                     time.sleep(wait_time)
 
-        # Tous les retries échoués, activer fallback
         import logging
         logging.error(f"Gemini API indisponible après {MAX_RETRIES} tentatives: {last_error}")
         self._fallback_mode = True
-        return self._embed_with_retry(text, task_type)  # Retourne fallback
+        return self._embed_with_retry(text, task_type)
 
     def _get_query_embedding(self, query: str) -> List[float]:
         return self._embed_with_retry(query, "RETRIEVAL_QUERY")
@@ -158,10 +130,6 @@ def get_embed_model():
     return _embed_model_instance
 
 
-# =============================================================================
-# DATA CLASSES
-# =============================================================================
-
 @dataclass
 class ElectionDocument:
     """Représente une ligne de données électorales formatée en texte."""
@@ -172,9 +140,6 @@ class ElectionDocument:
     metadata: Dict
 
 
-# =============================================================================
-# BONUS A : Connexion DB en readonly
-# =============================================================================
 DB_URL = os.environ.get(
     "AGENT_DB_URL",
     "postgresql://artefact_reader:reader_password@localhost:5433/elections_db"
@@ -182,23 +147,11 @@ DB_URL = os.environ.get(
 engine = create_engine(DB_URL)
 
 
-# =============================================================================
-# MOTEUR RAG (Resilient)
-# =============================================================================
-
 class RAGEngine:
-    """
-    Moteur de Retrieval Augmented Generation pour les données électorales.
-    Resilient: fonctionne même si les APIs externes sont indisponibles.
-    """
+    """Moteur de Retrieval Augmented Generation pour les données électorales."""
 
     def __init__(self, skip_index_build: bool = False):
-        """
-        Initialise le moteur RAG.
-
-        Args:
-            skip_index_build: Si True, ne construit pas l'index (lazy loading)
-        """
+        """Initialise le moteur RAG."""
         self.index: Optional[VectorStoreIndex] = None
         self.documents: List[Document] = []
         self._index_built = False
@@ -209,7 +162,6 @@ class RAGEngine:
             except Exception as e:
                 import logging
                 logging.error(f"Échec construction index RAG: {e}")
-                # Continue sans index - le système fonctionnera en mode dégradé
 
     def _fetch_election_data(self) -> List[ElectionDocument]:
         """Récupère les données électorales depuis la BDD."""
@@ -352,11 +304,7 @@ class RAGEngine:
             self.index = None
 
     def query(self, question: str, top_k: int = 3) -> Dict:
-        """
-        Interroge l'index RAG et génère une réponse narrative.
-        Resilient: retourne une réponse même si l'index n'est pas disponible.
-        """
-        # Lazy build si pas encore fait
+        """Interroge l'index RAG."""
         if not self._index_built and self.index is None:
             try:
                 self._build_index()
@@ -397,7 +345,6 @@ class RAGEngine:
 
         context = "\n\n".join(context_parts)
 
-        # Génération avec Ollama + retry
         for attempt in range(MAX_RETRIES):
             try:
                 if client is None:

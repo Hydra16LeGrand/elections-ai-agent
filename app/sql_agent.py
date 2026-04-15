@@ -5,43 +5,29 @@ from sqlalchemy import create_engine, text
 from ollama import Client
 from dotenv import load_dotenv
 
-# Imports Level 2: Hybrid Router et Entity Resolution
 from .hybrid_router import route_with_fallback, classify_question
 from .entity_resolver import EntityResolver, get_resolver
 
 load_dotenv()
 
-# Instance singleton du résolveur d'entités
 entity_resolver = get_resolver()
 
-# =====================================================================================
-# CONFIGURATION ET INITIALISATION
-# =====================================================================================
+# Configuration
 
 client = Client(
     host="https://ollama.com",
     headers={'Authorization': f"Bearer {os.environ.get('OLLAMA_API_KEY')}"}
 )
 
-# =====================================================================================
-# CONFIGURATION DES MODÈLES
-# =====================================================================================
-# Modèle unique utilisé pour toutes les tâches (SQL, synthèse, classification)
-# Note: mixtral-8x7b n'est pas disponible sur Ollama Cloud, on utilise qwen3-coder-next
 MODEL_SQL = "qwen3-coder-next"
 
-# BONUS A : Connexion DB en readonly (user Postgres dédié)
 DB_URL = os.environ.get(
-    "AGENT_DB_URL", 
+    "AGENT_DB_URL",
     "postgresql://artefact_reader:reader_password@localhost:5433/elections_db"
 )
 engine = create_engine(DB_URL)
 
-# =====================================================================================
-# PROMPTS SYSTÈMES
-# =====================================================================================
-
-# PROMPT 1 : Le Routeur (Pour gérer les Bonus B et C)
+# Prompts systèmes
 ROUTER_PROMPT = """
 Tu es le gardien de la sécurité d'une base de données électorale de Côte d'Ivoire.
 ATTENTION : Cette base de données contient UNIQUEMENT des résultats d'élections locales/législatives (députés, maires, partis, participation). Elle NE CONTIENT AUCUNE donnée sur le Président de la République ou les élections présidentielles.
@@ -55,7 +41,7 @@ Réponds UNIQUEMENT avec un objet JSON valide ayant ce format :
 {"intent": "valid|out_of_domain|adversarial", "reasoning": "Explication courte"}
 """
 
-# PROMPT 2 : Le Générateur SQL (Bonus A : Semantic Layer explicite et Few-Shot)
+# Générateur SQL
 SCHEMA_CONTEXT = """
 Tu es un expert en données électorales ivoiriennes. Génère UNIQUEMENT une requête SQL PostgreSQL valide.
 Tu n'as accès qu'aux 3 vues en lecture seule (Couche Sémantique) :
@@ -74,28 +60,19 @@ Q: "Participation rate by region"
 SQL: SELECT region, SUM(votants) * 100.0 / SUM(inscrits) as taux FROM vw_turnout GROUP BY region;
 """
 
-# =====================================================================================
-# FONCTIONS DE SÉCURITÉ (GUARDRAILS - BONUS A)
-# =====================================================================================
-
 def apply_guardrails(sql_query: str) -> tuple[bool, str, str]:
-    """Applique les règles de sécurité strictes sur la requête générée."""
-
-    # CORRECTION DE ROBUSTESSE : Retirer les espaces et le point-virgule final
+    """Valide la requête SQL contre les règles de sécurité."""
     sql_query = sql_query.strip().rstrip(';')
     sql_upper = sql_query.upper()
 
-    # 1. Blocage des mots interdits
     forbidden = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", "GRANT", "REVOKE"]
     if any(keyword in sql_upper for keyword in forbidden):
         return False, sql_query, "Opération destructive détectée et bloquée."
 
-    # 2. Allowlist stricte (Doit interroger l'une des vues, et JAMAIS la table raw)
     allowed_views = ["VW_WINNERS", "VW_TURNOUT", "VW_RESULTS_CLEAN"]
     if not any(view in sql_upper for view in allowed_views) or "RAW_ELECTION_DATA" in sql_upper:
         return False, sql_query, "Violation de l'Allowlist : Table non autorisée."
 
-    # 3. Enforcement automatique du LIMIT (sauf sur requêtes d'agrégation)
     aggregation_keywords = ["SUM(", "AVG(", "COUNT(", "MIN(", "MAX(", "GROUP BY"]
     is_aggregation = any(agg in sql_upper for agg in aggregation_keywords)
 
@@ -104,25 +81,19 @@ def apply_guardrails(sql_query: str) -> tuple[bool, str, str]:
 
     return True, sql_query, ""
 
-# =====================================================================================
-# MOTEUR D'EXÉCUTION ET IA
-# =====================================================================================
-
 def execute_sql(sql_query: str) -> tuple[list, str]:
-    """Exécute la requête avec un Timeout strict de 5 secondes (Bonus A)."""
+    """Exécute la requête avec timeout de 5 secondes."""
     try:
         with engine.connect() as conn:
-            # Application du Timeout natif PostgreSQL pour cette session
             conn.execute(text("SET statement_timeout = '5s'"))
             result = conn.execute(text(sql_query))
-            # Conversion en liste de dictionnaires pour Streamlit (Data Preview & Charts)
             rows = [dict(row._mapping) for row in result]
             return rows, ""
     except Exception as e:
         return [], str(e)
 
 def analyze_intent(question: str) -> dict:
-    """Utilise l'IA pour classifier l'intention de l'utilisateur."""
+    """Classifie l'intention de la question utilisateur."""
     try:
         response = client.chat(
             model=MODEL_SQL,
@@ -133,7 +104,6 @@ def analyze_intent(question: str) -> dict:
             options={"temperature": 0.0}
         )
         content = response['message']['content'].strip()
-        # Nettoyage d'un éventuel bloc markdown JSON
         clean_json = re.sub(r"^```json|```$", "", content, flags=re.MULTILINE).strip()
         return json.loads(clean_json)
     except Exception:
@@ -141,10 +111,7 @@ def analyze_intent(question: str) -> dict:
 
 
 def synthesize_and_choose_chart(question: str, data: list, sql: str) -> dict:
-    """
-    Génère la synthèse narrative ET choisit le type de graphique.
-    Réduit les appels LLM en fusionnant deux tâches.
-    """
+    """Génère la synthèse narrative et choisit le type de graphique."""
     if not data or len(data) == 0:
         return {
             "narrative": "Aucune donnée trouvée pour cette requête.",
@@ -183,11 +150,8 @@ Réponds UNIQUEMENT avec ce format JSON:
             options={"temperature": 0.1}
         )
         content = response['message']['content'].strip()
-        # Nettoyage JSON
         clean_json = re.sub(r"^```json|```$", "", content, flags=re.MULTILINE).strip()
         result = json.loads(clean_json)
-
-        # Validation
         valid_types = ["bar", "pie", "line", "scatter", "table"]
         chart_type = result.get("chart_type", "table").lower()
         if chart_type not in valid_types:
@@ -198,26 +162,18 @@ Réponds UNIQUEMENT avec ce format JSON:
             "chart_type": chart_type
         }
     except Exception:
-        # Fallback sur heuristique simple
         chart_type = "bar" if num_rows > 1 and len(numeric_cols) > 0 and len(string_cols) > 0 else "table"
         return {
             "narrative": "Données extraites avec succès.",
             "chart_type": chart_type
         }
 
-# =====================================================================================
-# ORCHESTRATEUR PRINCIPAL (L'AGENT)
-# =====================================================================================
-
 def ask_database(user_question: str) -> dict:
-    """
-    Point d'entrée principal. Renvoie un dictionnaire structuré pour l'UI Streamlit.
-    """
-    # 1. Analyse de l'intention (Gestion des Bonus B et C)
+    """Point d'entrée principal pour interroger la base de données."""
     intent_analysis = analyze_intent(user_question)
     intent = intent_analysis.get("intent", "valid")
-    
-    # BONUS B : Comportement Non-answer (Out of domain)
+
+    # Comportement Non-answer (Out of domain)
     if intent == "out_of_domain":
         return {
             "status": "error",
@@ -231,7 +187,7 @@ def ask_database(user_question: str) -> dict:
             "data": [], "sql": ""
         }
         
-    # BONUS C : Comportement Adversarial
+    # Comportement Adversarial
     if intent == "adversarial":
         return {
             "status": "error",
@@ -243,7 +199,7 @@ def ask_database(user_question: str) -> dict:
             "data": [], "sql": ""
         }
 
-    # 2. Boucle ReAct (Self-Correction) pour la génération SQL
+    # Boucle ReAct pour la génération SQL
     error_feedback = ""
     for attempt in range(3):
         prompt = f"Question: {user_question}\n"
@@ -251,7 +207,6 @@ def ask_database(user_question: str) -> dict:
             prompt += f"ATTENTION. Ta précédente requête a échoué : {error_feedback}. Corrige-la."
 
         try:
-            # Appel LLM avec modèle SQL (qualité)
             response = client.chat(
                 model=MODEL_SQL,
                 messages=[
@@ -263,19 +218,16 @@ def ask_database(user_question: str) -> dict:
             raw_sql = response['message']['content'].strip()
             raw_sql = re.sub(r"^```sql|```$", "", raw_sql, flags=re.MULTILINE).strip()
 
-            # Guardrails
             is_safe, final_sql, guardrail_error = apply_guardrails(raw_sql)
             if not is_safe:
                 error_feedback = guardrail_error
                 continue
 
-            # Exécution DB
             data, db_error = execute_sql(final_sql)
             if db_error:
                 error_feedback = db_error
                 continue
 
-            # SUCCÈS - Synthèse et choix de chart en un seul appel (modèle rapide)
             synthesis_result = synthesize_and_choose_chart(user_question, data, final_sql)
 
             return {
@@ -297,34 +249,13 @@ def ask_database(user_question: str) -> dict:
     }
 
 
-# =====================================================================================
-# HYBRID ROUTER - LEVEL 2
-# =====================================================================================
-
 def ask_hybrid(user_question: str, preference: str = None) -> dict:
-    """
-    Point d'entrée hybride (Level 2).
-
-    Orchestration complète :
-    1. Pré-traitement : Fuzzy matching pour corriger les entités
-    2. Classification : Route SQL vs RAG vs Clarification
-    3. Exécution : Appelle le bon moteur selon la route
-
-    Args:
-        user_question: Question en langage naturel
-        preference: Préférence utilisateur si clarification ("sql" ou "rag")
-
-    Returns:
-        Réponse structurée (status, narrative, data, sql, chart_type, route)
-    """
-    # ÉTAPE 1: Résolution d'entités (fuzzy matching)
-    # Ex: "Tiapam" → "Tiapoum"
+    """Point d'entrée hybride (Level 2) pour SQL ou RAG."""
     corrected_question, entity_metadata = entity_resolver.resolve_question(user_question)
 
     if entity_metadata["replacements"]:
-        print(f"🔄 [Entity Resolver] Corrections: {entity_metadata['replacements']}")
+        print(f"[Entity Resolver] Corrections: {entity_metadata['replacements']}")
 
-    # Si une préférence est spécifiée (après clarification), forcer la route
     if preference == "sql":
         result = ask_database(corrected_question)
         result["route"] = "sql"
@@ -339,10 +270,8 @@ def ask_hybrid(user_question: str, preference: str = None) -> dict:
         result["narrative"] = f"[Préférence RAG] {result['narrative']}"
         return result
 
-    # ÉTAPE 2: Classification (SQL vs RAG)
     routing_result = route_with_fallback(corrected_question)
 
-    # CAS A: Clarification nécessaire
     if routing_result["route"] == "clarification":
         return {
             "status": "clarification",
@@ -354,16 +283,13 @@ def ask_hybrid(user_question: str, preference: str = None) -> dict:
             "confidence": routing_result["confidence"]
         }
 
-    # CAS B: Route SQL
     if routing_result["route"] == "sql":
         result = ask_database(corrected_question)
         result["route"] = "sql"
         result["confidence"] = routing_result["confidence"]
         return result
 
-    # CAS C: Route RAG
     if routing_result["route"] == "rag":
-        # Import et appel du moteur RAG
         from .rag_engine import query_rag
         result = query_rag(corrected_question)
         result["route"] = "rag"
@@ -381,28 +307,20 @@ def ask_hybrid(user_question: str, preference: str = None) -> dict:
     }
 
 
-# =====================================================================================
-# BLOC DE TEST LOCAL (INTERACTIF & DEBUG)
-# =====================================================================================
 if __name__ == "__main__":
-    print("--- Test interactif de l'Agent Text-to-SQL ---")
-    print("Tapez 'exit' pour arrêter le script.\n")
-    
+    print("Test interactif de l'Agent Text-to-SQL")
+    print("Tapez 'exit' pour arrêter.\n")
+
     while True:
-        question = input("\n🗣️ Posez votre question : ")
+        question = input("\nPosez votre question: ")
         if question.lower() == 'exit':
             break
-            
-        print("🧠 L'agent réfléchit...")
-        
-        # Pour le DEBUG : On va modifier temporairement l'appel pour voir l'erreur API
+
         try:
             resultat = ask_database(question)
-            
-            print(f"\n📊 Statut : {resultat['status']}")
-            print(f"📝 Réponse : {resultat['narrative']}")
+            print(f"\nStatut: {resultat['status']}")
+            print(f"Réponse: {resultat['narrative']}")
             if resultat['sql']:
-                print(f"🔍 SQL Final : {resultat['sql']}")
-                
+                print(f"SQL: {resultat['sql']}")
         except Exception as e:
-            print(f"\n❌ ERREUR CRITIQUE (Hors Agent) : {e}")
+            print(f"\nErreur: {e}")

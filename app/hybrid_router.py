@@ -1,7 +1,4 @@
-"""
-Module de routage hybride SQL vs RAG.
-Analyse les questions utilisateur et route vers le bon moteur de réponse.
-"""
+"""Module de routage hybride SQL vs RAG."""
 
 import os
 import json
@@ -12,14 +9,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
-
 OLLAMA_HOST = "https://ollama.com"
-MODEL_ROUTER = "qwen3-coder-next"  # Modèle disponible sur Ollama Cloud
+MODEL_ROUTER = "qwen3-coder-next"
 
-# Seuil de confiance minimum pour router sans clarification
 CONFIDENCE_THRESHOLD = 0.80
 
 client = Client(
@@ -28,9 +20,7 @@ client = Client(
 )
 
 
-# =============================================================================
-# PROMPT DE CLASSIFICATION
-# =============================================================================
+# Prompts de classification
 
 ROUTER_PROMPT = """Tu es un routeur intelligent qui analyse les questions d'utilisateurs sur des données électorales.
 
@@ -90,24 +80,8 @@ Réponds UNIQUEMENT avec la question de clarification, sans autre texte.
 """
 
 
-# =============================================================================
-# FONCTIONS PRINCIPALES
-# =============================================================================
-
 def classify_question(question: str) -> Dict[str, any]:
-    """
-    Classe une question en SQL, RAG ou AMBIGUOUS.
-
-    Args:
-        question: Question en langage naturel de l'utilisateur
-
-    Returns:
-        Dict avec keys: 'route' (sql/rag/ambiguous), 'confidence' (float), 'reasoning' (str)
-
-    Example:
-        >>> classify_question("Combien de bulletins nuls ?")
-        {'route': 'sql', 'confidence': 0.95, 'reasoning': 'Demande de comptage précis'}
-    """
+    """Classe une question en SQL, RAG ou AMBIGUOUS."""
     try:
         response = client.chat(
             model=MODEL_ROUTER,
@@ -119,17 +93,13 @@ def classify_question(question: str) -> Dict[str, any]:
         )
 
         content = response['message']['content'].strip()
-
-        # Nettoyage du JSON
         clean_json = re.sub(r"^```json|```$", "", content, flags=re.MULTILINE).strip()
         result = json.loads(clean_json)
 
-        # Validation
         route = result.get("route", "ambiguous")
         confidence = float(result.get("confidence", 0.5))
         reasoning = result.get("reasoning", "")
 
-        # Normalisation
         if route not in ["sql", "rag", "ambiguous"]:
             route = "ambiguous"
 
@@ -140,7 +110,6 @@ def classify_question(question: str) -> Dict[str, any]:
         }
 
     except json.JSONDecodeError:
-        # Fallback si le LLM ne retourne pas un JSON valide
         return {
             "route": "ambiguous",
             "confidence": 0.0,
@@ -155,15 +124,7 @@ def classify_question(question: str) -> Dict[str, any]:
 
 
 def ask_clarification(question: str) -> str:
-    """
-    Génère une question de clarification quand la route est ambiguë.
-
-    Args:
-        question: Question originale ambiguë
-
-    Returns:
-        Question de clarification à poser à l'utilisateur
-    """
+    """Génère une question de clarification."""
     try:
         prompt = CLARIFICATION_PROMPT.format(question=question)
 
@@ -176,7 +137,6 @@ def ask_clarification(question: str) -> str:
         return response['message']['content'].strip()
 
     except Exception:
-        # Fallback générique
         return ("Je peux répondre de deux façons :\n"
                 "1. Donner des chiffres précis (classements, pourcentages)\n"
                 "2. Fournir un résumé narratif des résultats\n\n"
@@ -184,23 +144,11 @@ def ask_clarification(question: str) -> str:
 
 
 def route_with_fallback(question: str) -> Dict[str, any]:
-    """
-    Route une question avec gestion de la confiance et fallback.
-
-    Si la confiance est trop basse (< 0.8), retourne une demande de clarification
-    au lieu de forcer une route.
-
-    Args:
-        question: Question de l'utilisateur
-
-    Returns:
-        Dict avec 'route' et soit 'result' soit 'clarification_question'
-    """
+    """Route une question avec fallback sur clarification si confiance faible."""
     classification = classify_question(question)
     route = classification["route"]
     confidence = classification["confidence"]
 
-    # Si confiance trop basse ou ambigu, demander clarification
     if route == "ambiguous" or confidence < CONFIDENCE_THRESHOLD:
         clarification = ask_clarification(question)
         return {
@@ -218,29 +166,14 @@ def route_with_fallback(question: str) -> Dict[str, any]:
     }
 
 
-# =============================================================================
-# BLOC DE TEST
-# =============================================================================
-
 if __name__ == "__main__":
-    print("=== Test Hybrid Router ===")
-    print()
+    print("Test Hybrid Router")
 
     test_questions = [
-        # SQL
         "Combien de bulletins nuls ont été enregistrés ?",
         "Quel candidat a obtenu le plus de voix à Abidjan ?",
-        "Top 5 des partis par nombre de sièges",
-        "Taux de participation dans la région de Korhogo",
-
-        # RAG
         "Résume les résultats de cette élection",
-        "Donne un aperçu des tendances électorales",
-        "Explique la répartition géographique des votes",
-
-        # Ambigu
         "Parle-moi de Tiapoum",
-        "Qu'est-ce qui s'est passé à Bouna ?",
     ]
 
     for question in test_questions:
@@ -248,12 +181,9 @@ if __name__ == "__main__":
         result = route_with_fallback(question)
 
         if result["route"] == "clarification":
-            print(f"  → [CLARIFICATION NEEDED]")
-            print(f"    Confiance: {result['confidence']:.2f}")
-            print(f"    Réponse: {result['clarification_question'][:80]}...")
+            print(f"  [CLARIFICATION]")
+            print(f"  Confiance: {result['confidence']:.2f}")
         else:
-            print(f"  → Route: {result['route'].upper()}")
-            print(f"    Confiance: {result['confidence']:.2f}")
-            print(f"    Raison: {result['reasoning']}")
-
+            print(f"  Route: {result['route'].upper()}")
+            print(f"  Confiance: {result['confidence']:.2f}")
         print()

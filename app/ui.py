@@ -1,45 +1,26 @@
-"""
-CI Elections - Interface Chatbot Streamlit
-Application d'analyse électorale avec Text-to-SQL et visualisations intelligentes.
-"""
+"""CI Elections - Interface Chatbot Streamlit."""
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Import du backend hybrid agent (SQL + RAG)
-# Gestion des différents contextes d'exécution (local vs Docker)
 import sys
 from pathlib import Path
 
-# Ajoute le répertoire parent au path si nécessaire (pour exécution locale)
 current_dir = Path(__file__).parent
 parent_dir = current_dir.parent
 if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
-# Import après ajustement du path
 from app.sql_agent import ask_hybrid
 
-
-# =============================================================================
-# FONCTIONS DE RENDU DES GRAPHIQUES
-# =============================================================================
-
 def render_single_value(data: dict) -> None:
-    """
-    Affiche une valeur unique agrégée dans une carte visuelle.
-
-    Utilisé quand la requête retourne une seule ligne avec une valeur
-    agrégée (ex: total, moyenne, compte).
-    """
-    # Extraction de la valeur et de son label
+    """Affiche une valeur unique agrégée dans une carte visuelle."""
     keys = list(data.keys())
     if not keys:
         st.info("Aucune donnée disponible.")
         return
 
-    # Détection de la colonne de valeur (généralement numérique ou la première)
     value_key = None
     label_key = None
 
@@ -50,7 +31,6 @@ def render_single_value(data: dict) -> None:
         elif isinstance(val, str) and label_key is None:
             label_key = key
 
-    # Fallback si pas de valeur numérique trouvée
     if value_key is None:
         value_key = keys[-1]
 
@@ -58,7 +38,6 @@ def render_single_value(data: dict) -> None:
     label = label_key if label_key else value_key
     label_value = data.get(label_key, "") if label_key else ""
 
-    # Formatage de la valeur
     if isinstance(value, (int, float)):
         if isinstance(value, int) or value == int(value):
             formatted_value = f"{int(value):,}".replace(",", " ")
@@ -66,8 +45,6 @@ def render_single_value(data: dict) -> None:
             formatted_value = f"{value:,.2f}".replace(",", " ")
     else:
         formatted_value = str(value)
-
-    # Affichage dans une carte stylisée
     st.markdown(f"""
         <div style="
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
