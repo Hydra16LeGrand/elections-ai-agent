@@ -181,7 +181,7 @@ def ask_clarification(question: str) -> str:
 
 def route_with_fallback(question: str) -> Dict[str, any]:
     """Route une question avec fallback sur clarification si confiance faible."""
-    # Vérifier les ambiguïtés d'entités avant la classification
+    # Check entity ambiguities before classification
     ambiguity = detect_entity_ambiguity(question)
     if ambiguity:
         return {

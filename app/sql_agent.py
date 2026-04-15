@@ -123,12 +123,12 @@ def synthesize_and_choose_chart(question: str, data: list, sql: str) -> dict:
             "chart_type": "table"
         }
 
-    # Analyse des colonnes
+    # Column analysis
     sample_row = data[0] if data else {}
     columns = list(sample_row.keys())
     num_rows = len(data)
 
-    # Détection heuristique pour le choix de chart (fallback si LLM échoue)
+    # Heuristic detection for chart choice (fallback if LLM fails)
     numeric_cols = [col for col in columns if isinstance(sample_row.get(col), (int, float))]
     string_cols = [col for col in columns if isinstance(sample_row.get(col), str)]
 
@@ -204,10 +204,25 @@ def ask_database(user_question: str) -> dict:
             "data": [], "sql": ""
         }
 
-    # Boucle ReAct pour la génération SQL
+    # Resolve entities in question to improve SQL generation
+    resolver = get_resolver()
+    words = user_question.split()
+    resolved_words = []
+    for word in words:
+        resolved, score = resolver.resolve_locality(word)
+        if score >= 80 and resolved != word:
+            resolved_words.append(resolved)
+        else:
+            resolved_words.append(word)
+    resolved_question = " ".join(resolved_words)
+
+    # Use resolved question if different
+    question_for_sql = resolved_question if resolved_question != user_question else user_question
+
+    # ReAct loop for SQL generation
     error_feedback = ""
     for attempt in range(3):
-        prompt = f"Question: {user_question}\n"
+        prompt = f"Question: {question_for_sql}\n"
         if error_feedback:
             prompt += f"ATTENTION. Ta précédente requête a échoué : {error_feedback}. Corrige-la."
 

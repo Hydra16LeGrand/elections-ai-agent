@@ -101,7 +101,7 @@ class GeminiEmbedding(BaseEmbedding):
             except Exception as e:
                 import logging
                 logging.error(f"Erreur embedding batch item: {e}")
-                # Fallback pour cet item
+                # Fallback for this item
                 results.append(self._embed_with_retry(text, "RETRIEVAL_DOCUMENT"))
         return results
 
@@ -124,7 +124,7 @@ def get_embed_model():
         except Exception as e:
             import logging
             logging.error(f"Impossible d'initialiser GeminiEmbedding: {e}")
-            # Crée un embedding dummy qui ne bloque pas l'app
+            # Create dummy embedding that doesn't block the app
             _embed_model_instance = GeminiEmbedding()
             _embed_model_instance._fallback_mode = True
     return _embed_model_instance
@@ -380,7 +380,7 @@ class RAGEngine:
                 if attempt < MAX_RETRIES - 1:
                     time.sleep(RETRY_DELAY)
                 else:
-                    # Fallback: retourne le contexte brut
+                    # Fallback: return raw context
                     return {
                         'status': 'partial',
                         'narrative': (
@@ -416,7 +416,7 @@ RÉPONSE:"""
 
 
 # =============================================================================
-# INSTANCE SINGLETON (Thread-safe avec lock)
+# SINGLETON INSTANCE (Thread-safe with lock)
 # =============================================================================
 
 import threading
@@ -433,7 +433,7 @@ def get_rag_engine() -> RAGEngine:
     if _rag_engine_instance is None:
         with _rag_engine_lock:
             if _rag_engine_instance is None:
-                # Skip build au démarrage pour accélérer le cold start
+                # Skip build at startup to speed up cold start
                 _rag_engine_instance = RAGEngine(skip_index_build=True)
     return _rag_engine_instance
 

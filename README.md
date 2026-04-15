@@ -44,7 +44,7 @@ cp .env.example .env
 docker-compose up --build -d
 ```
 
-**Important** : L'interface n'est pas immédiatement disponible. Au premier démarrage, le système :
+**Important** : L'interface n'est pas imédiatement disponible. Au premier démarrage, le système :
 1. Ingeste les données PDF (~2 min)
 2. Construit l'index RAG (~1-2 min)
 

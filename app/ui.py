@@ -84,7 +84,7 @@ def render_bar_chart(df: pd.DataFrame, question: str) -> None:
     (catégorielle) et l'axe Y (numérique).
     Ne s'affiche pas si une seule ligne de données.
     """
-    # Ne pas afficher le graphique si une seule valeur
+    # Skip chart for single values
     if len(df) <= 1:
         return
 
@@ -95,10 +95,10 @@ def render_bar_chart(df: pd.DataFrame, question: str) -> None:
         st.dataframe(df, use_container_width=True)
         return
 
-    # Sélection des colonnes pour le graphique
+    # Select columns for the chart
     y_col = numeric_cols[0]
 
-    # Choix de la colonne catégorielle pour l'axe X
+    # Pick categorical column for X axis
     if string_cols:
         x_col = string_cols[0]
     elif len(numeric_cols) > 1:
@@ -106,14 +106,14 @@ def render_bar_chart(df: pd.DataFrame, question: str) -> None:
     else:
         x_col = df.index.name if df.index.name else "Index"
 
-    # Limitation à 20 catégories pour la lisibilité
+    # Limit to 20 categories for readability
     if len(df) > 20:
         df = df.nlargest(20, y_col)
         title_suffix = " (Top 20)"
     else:
         title_suffix = ""
 
-    # Forcer le respect de l'ordre des catégories (ordre SQL préservé)
+    # Preserve SQL ordering for categories
     category_order = df[x_col].tolist()
 
     fig = px.bar(
@@ -154,10 +154,10 @@ def render_pie_chart(df: pd.DataFrame, question: str) -> None:
     values_col = numeric_cols[0]
     names_col = string_cols[0]
 
-    # Agrégation si doublons dans les noms
+    # Aggregate duplicates in names
     df_agg = df.groupby(names_col)[values_col].sum().reset_index()
 
-    # Regroupement des petites valeurs si plus de 8 catégories
+    # Group small values if more than 8 categories
     if len(df_agg) > 8:
         df_agg = df_agg.sort_values(values_col, ascending=False)
         top_n = df_agg.head(7)
@@ -198,7 +198,7 @@ def render_line_chart(df: pd.DataFrame, question: str) -> None:
         st.dataframe(df, use_container_width=True)
         return
 
-    # Détection de colonne pour l'axe X
+    # X axis column detection
     x_col = None
     for col in df.columns:
         if any(keyword in col.lower() for keyword in ["date", "annee", "year", "temps", "time", "ordre"]):
@@ -246,7 +246,7 @@ def render_scatter_chart(df: pd.DataFrame, question: str) -> None:
     x_col = numeric_cols[0]
     y_col = numeric_cols[1]
 
-    # Détection d'une colonne pour la couleur
+    # Color column detection
     color_col = None
     for col in df.columns:
         if col not in numeric_cols:
@@ -302,13 +302,13 @@ def render_chart(data: list, chart_type: str, question: str, sql: str = "") -> N
     df = pd.DataFrame(data)
     num_rows = len(df)
 
-    # Seuil: au-delà de 15 lignes, un tableau est souvent plus lisible qu'un graphique
+    # Threshold: beyond 15 rows, table is often more readable than chart
     if num_rows > 15 or chart_type == "table":
         st.caption(f"📊 {num_rows} résultats affichés sous forme de tableau")
         render_data_table(df)
         return
 
-    # Pour les petits jeux de données, laisser le choix entre graphique et tableau
+    # For small datasets, let user choose between chart and table
     if num_rows <= 15:
         col1, col2 = st.columns([1, 3])
         with col1:
@@ -322,7 +322,7 @@ def render_chart(data: list, chart_type: str, question: str, sql: str = "") -> N
         if view_mode == "📋 Tableau":
             render_data_table(df)
         else:
-            # Afficher le graphique choisi par le LLM
+            # Show chart selected by LLM
             if chart_type == "bar":
                 render_bar_chart(df, question)
             elif chart_type == "pie":
@@ -358,10 +358,10 @@ def handle_entity_clarification(response: dict, question: str) -> None:
 
     st.markdown(f"**{clarification_question}**")
 
-    # Créer un bouton pour chaque option
+    # Create button for each option
     for option in options:
         if st.button(option, key=f"entity_{entity_type}_{option}_{question[:10]}"):
-            # Stocker le choix dans session_memory
+            # Store choice in session_memory
             session_mem = get_session_memory()
             session_mem.store(
                 entity_type,
@@ -369,13 +369,13 @@ def handle_entity_clarification(response: dict, question: str) -> None:
                 {"resolved_to": option, "region": option}
             )
 
-            # Stocker aussi dans st.session_state pour enrich_question_with_context
+            # Also store in st.session_state for enrich_question_with_context
             if "entity_resolutions" not in st.session_state:
                 st.session_state.entity_resolutions = {}
-            # Normaliser la clé en majuscule pour matcher les questions futures
+            # Normalize key to uppercase for matching future questions
             st.session_state.entity_resolutions[entity_value.upper()] = option
 
-            # Relancer la question originale
+            # Rerun original question
             st.session_state.pending_question = question
             st.rerun()
 
@@ -390,18 +390,18 @@ def render_bot_response(response: dict, question: str) -> None:
     """
     route = response.get("route", "sql")
 
-    # Affichage de la réponse narrative (commun à tous les types)
+    # Display narrative response (common to all types)
     if response.get("narrative"):
         st.markdown(response["narrative"])
 
     # Route SQL: afficher SQL + données + visualisations
     if route == "sql":
-        # Affichage du SQL dans un expander
+        # Show SQL in expander
         if response.get("sql"):
             with st.expander("Voir la requête SQL générée"):
                 st.code(response["sql"], language="sql")
 
-        # Affichage des données et visualisation
+        # Display data and visualization
         data = response.get("data", [])
         sql_query = response.get("sql", "")
         if data and len(data) > 0:
@@ -409,13 +409,13 @@ def render_bot_response(response: dict, question: str) -> None:
                 # Une seule valeur - afficher en grand sans tableau
                 render_single_value(data[0])
             else:
-                # Plusieurs lignes - afficher selon le choix du backend et la taille
+                # Multiple rows - show according to backend choice and size
                 chart_type = response.get("chart_type", "table")
                 render_chart(data, chart_type, question, sql_query)
 
-    # Route RAG: afficher les informations sur les sources
+    # RAG route: show source information
     elif route == "rag":
-        # Affichage des régions sources si disponibles
+        # Show source regions if available
         source_regions = response.get("source_regions", [])
         source_circonscriptions = response.get("source_circonscriptions", [])
 
@@ -428,14 +428,14 @@ def render_bot_response(response: dict, question: str) -> None:
                     if len(source_circonscriptions) > 5:
                         st.caption(f"... et {len(source_circonscriptions) - 5} autres")
 
-    # Route clarification SQL/RAG: afficher les boutons de choix
+    # SQL/RAG clarification route: show choice buttons
     elif route == "clarification":
         st.markdown("*Veuillez préciser votre préférence:*")
 
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Données précises (SQL)", key=f"clarify_sql_{question[:20]}"):
-                # Stocker la préférence et relancer la question
+                # Store preference and rerun question
                 st.session_state.clarification_preference = "sql"
                 st.session_state.pending_question = question
                 st.rerun()
@@ -445,7 +445,7 @@ def render_bot_response(response: dict, question: str) -> None:
                 st.session_state.pending_question = question
                 st.rerun()
 
-    # Route entity_clarification: afficher les options pour résoudre l'ambiguité
+    # entity_clarification route: show options to resolve ambiguity
     elif route == "entity_clarification":
         handle_entity_clarification(response, question)
 
@@ -579,7 +579,7 @@ def _store_entities_from_results(data: list) -> None:
         region = row.get("region")
 
         if locality and region:
-            # Stocker le nom complet pour matching futur
+            # Store full name for future matching
             session_mem.store("locality", locality, {"region": region})
 
             if "entity_resolutions" not in st.session_state:
@@ -596,11 +596,11 @@ def enrich_question_with_context(question: str) -> str:
     if not resolutions:
         return question
 
-    # Utiliser EntityResolver pour trouver les entités dans la question
+    # Use EntityResolver to find entities in question
     from app.entity_resolver import get_resolver
     resolver = get_resolver()
 
-    # Chercher chaque mot de la question dans les entités connues
+    # Search each word in question against known entities
     words = question.split()
     context_parts = []
 
@@ -611,7 +611,7 @@ def enrich_question_with_context(question: str) -> str:
         # Essayer de résoudre comme localité
         resolved, score = resolver.resolve_locality(word)
         if score >= 80:
-            # Chercher si cette localité a une région stockée
+            # Check if this locality has a stored region
             resolved_upper = resolved.upper()
             if resolved_upper in resolutions:
                 region = resolutions[resolved_upper]
@@ -638,27 +638,27 @@ def handle_user_input(prompt: str):
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Détection d'une préférence de clarification (si l'utilisateur a cliqué sur un bouton)
+    # Detect clarification preference (if user clicked a button)
     preference = None
     if "clarification_preference" in st.session_state:
         preference = st.session_state.clarification_preference
         del st.session_state.clarification_preference
 
-    # Enrichir la question avec les entités déjà résolues en session
+    # Enrich question with already resolved entities from session
     enriched_prompt = enrich_question_with_context(prompt)
 
-    # Génération de la réponse
+    # Generate response
     with st.chat_message("assistant"):
         with st.spinner("Analyse de votre question..."):
             try:
                 response = ask_hybrid(enriched_prompt, preference=preference)
 
-                # Gestion des erreurs
+                # Error handling
                 if response.get("status") == "error":
                     st.error(f"⚠️ {response.get('narrative', 'Une erreur est survenue')}")
                 else:
                     render_bot_response(response, prompt)
-                    # Stocker les entités des résultats SQL pour enrichir les questions futures
+                    # Store entities from SQL results to enrich future questions
                     if response.get("route") == "sql" and response.get("data"):
                         _store_entities_from_results(response["data"])
 
@@ -697,7 +697,7 @@ def main():
     render_sidebar()
     init_chat_history()
 
-    # En-tête de la page principale
+    # Main page header
     st.title("🗳️ CI Elections - Agent d'Analyse Électorale")
     st.markdown("*Posez vos questions sur les résultats électoraux ivoiriens en langage naturel*")
     st.markdown("---")
@@ -705,7 +705,7 @@ def main():
     # Affichage de l'historique
     render_chat_history()
 
-    # Gestion d'une question en attente (clarification)
+    # Handle pending question (clarification)
     if "pending_question" in st.session_state:
         pending = st.session_state.pending_question
         del st.session_state.pending_question
@@ -715,12 +715,12 @@ def main():
     # Zone de saisie utilisateur
     user_input = st.chat_input("Posez votre question sur les élections...")
 
-    # Gestion de la question suggérée depuis la sidebar
+    # Handle suggested question from sidebar
     if "suggested_question" in st.session_state:
         user_input = st.session_state.suggested_question
         del st.session_state.suggested_question
 
-    # Traitement de la question
+    # Process question
     if user_input:
         handle_user_input(user_input)
 
