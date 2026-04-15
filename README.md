@@ -60,7 +60,7 @@ Le système route automatiquement les questions vers le bon moteur selon l'inten
 | **Warmup Script** | `warmup.py` | Pré-construction index RAG au startup Docker |
 
 ### Bonus Level 2 - Citations/Provenance
-**Statut** : 🟡 Partiellement implémenté  
+**Statut** : Partiellement implémenté  
 Le `code_circonscription` est utilisé comme proxy pour la source. Les numéros de page PDF n'ont pas été extraits (pas eu le temps de modifier le script d'ingestion).
 
 ## Performance Optimizations
