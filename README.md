@@ -77,6 +77,8 @@ Posez des questions en langage naturel :
 
 Le système détecte automatiquement s'il doit utiliser SQL (chiffres précis) ou RAG (résumés).
 
+**Recherche flexible** : Les questions peuvent mentionner une région ou une circonscription sans préciser. Le système recherche automatiquement dans les deux champs (ex: "Abidjan" trouve toutes les circonscriptions du district).
+
 ## Structure du projet
 
 ```

@@ -52,12 +52,17 @@ Tu n'as accès qu'aux 3 vues en lecture seule (Couche Sémantique) :
 RÈGLES :
 - Aucun texte, aucun markdown (pas de ```sql). Juste la requête.
 - NE FAIS JAMAIS DE JOINTURE (JOIN) entre ces vues.
+- Si une entité peut être une région OU une circonscription, cherche dans les DEUX colonnes avec OR.
 
 EXEMPLES (Few-Shot) :
 Q: "Quel est le candidat qui a gagné à Agboville ?"
 SQL: SELECT candidat, parti FROM vw_winners WHERE nom_circonscription ILIKE '%AGBOVILLE%';
 Q: "Participation rate by region"
 SQL: SELECT region, SUM(votants) * 100.0 / SUM(inscrits) as taux FROM vw_turnout GROUP BY region;
+Q: "Qui a gagné à Abidjan ?"
+SQL: SELECT candidat, parti FROM vw_winners WHERE region ILIKE '%ABIDJAN%' OR nom_circonscription ILIKE '%ABIDJAN%';
+Q: "Résultats à Tiapoum ?"
+SQL: SELECT candidat, parti FROM vw_winners WHERE region ILIKE '%TIAPOUM%' OR nom_circonscription ILIKE '%TIAPOUM%';
 """
 
 def apply_guardrails(sql_query: str) -> tuple[bool, str, str]:
