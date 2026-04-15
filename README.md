@@ -1,165 +1,145 @@
-# CI Elections - Data & AI Platform
+# CI Elections - Agent d'Analyse Électorale
 
-Plateforme d'analyse des élections locales ivoiriennes intégrant un pipeline d'ingestion ELT et un agent conversationnel Text-to-SQL sécurisé avec interface web Streamlit.
+Chatbot pour interroger les résultats des élections locales ivoiriennes via une interface conversationnelle.
 
-## Architecture Principale
+## Fonctionnalités
 
-Le système repose sur trois couches distinctes :
+- **Questions analytiques** : "Combien de sièges a remporté le RHDP ?" → réponse avec données SQL
+- **Questions narratives** : "Résume les résultats de Tiapoum" → réponse RAG avec contexte
+- **Visualisations** : graphiques automatiques (barres, camembres) selon les données
+- **Sécurité** : guardrails SQL (pas de DROP/DELETE, LIMIT auto, allowlist tables)
 
-1. **Couche Ingestion (Data Engineering) - `/ingestion`**
-   - Extraction des données tabulaires complexes depuis le PDF source via `camelot`.
-   - Nettoyage, standardisation et propagation géographique (Forward Fill).
-   - Déploiement d'une couche sémantique PostgreSQL (Vues métier : `vw_winners`, `vw_turnout`, `vw_results_clean`) pour restreindre la portée des requêtes.
-   - Application du principe de moindre privilège (RBAC) via la création d'un profil `ReadOnly` dédié à l'agent d'inférence.
+## Architecture
 
-2. **Couche Application (AI Engineering) - `/app`**
-   - **Agent Text-to-SQL** avec architecture **Dual-Modèle** :
-     - `qwen3-coder-next` pour la génération SQL (qualité de code)
-     - `mixtral-8x7b` pour la synthèse narrative (vitesse)
-   - Boucle de rétroaction (ReAct loop) avec auto-correction sur erreur SQL.
-   - Routeur d'intention (Intent Router) pour la classification des requêtes.
-
-3. **Couche Interface (Frontend) - `/app/ui.py`**
-   - Interface chatbot avec **Smart Rendering** :
-     - Valeurs agrégées : affichage en carte stylisée
-     - Petits jeux de données (≤15 lignes) : toggle Graphique/Tableau
-     - Grands jeux de données (>15 lignes) : tableau par défaut
-   - Visualisations Plotly (bar, pie, line, scatter) avec ordre SQL préservé.
-
-## Architecture Decision Record (ADR) : Vanilla vs. Frameworks
-
-La couche d'orchestration Text-to-SQL est développée en Python standard ("Vanilla") plutôt qu'au travers d'abstractions de type LangChain (`create_sql_agent`). Ce choix garantit la validation des contraintes de sécurité :
-
-- **Routing Sémantique (Out of Domain) :** Les requêtes hors périmètre (ex: données présidentielles, météo) sont identifiées et rejetées par le routeur avant l'étape de traduction SQL, réduisant les risques d'hallucination.
-- **Guardrails Déterministes :** La validation des requêtes (Allowlist des vues, blocage des instructions DDL/DML type `DROP`, enforcement du `LIMIT` sauf sur agrégations) est gérée par des fonctions Python pures. Ce pare-feu applicatif offre une sécurité indépendante du modèle linguistique face aux tentatives d'injection (Adversarial Prompts).
-- **Contrat de données structuré :** L'agent retourne systématiquement un dictionnaire typé (`narrative`, `data`, `sql`, `chart_type`), condition préalable à la génération de graphiques dynamiques sur le front-end.
-
-## Bonus Implémentés (Level 1)
-
-| Bonus | Description | Implémentation |
-|-------|-------------|----------------|
-| **A - Guardrails** | Allowlist strict des vues, blocage DDL/DML (DROP, DELETE), timeout 5s, LIMIT intelligent (pas sur agrégations) | `sql_agent.py:apply_guardrails()` |
-| **B - Hors Domaine** | Détection et rejet des questions hors dataset (présidentielles, météo) | `sql_agent.py:ROUTER_PROMPT` |
-| **C - Adversarial** | Résistance aux prompt injections et tentatives d'exfiltration | `sql_agent.py:analyze_intent()` |
-
-## Level 2 - Hybrid Router (SQL + RAG)
-
-### Architecture Hybride
-Le système route automatiquement les questions vers le bon moteur selon l'intention :
-- **Route SQL** : Questions analytiques (chiffres, comptages, classements, pourcentages)
-- **Route RAG** : Questions narratives (résumés, explications, contexte qualitatif)
-- **Route Clarification** : Questions ambiguës avec demande de précision à l'utilisateur
-
-### Composants Implémentés
-
-| Composant | Fichier | Description |
-|-----------|---------|-------------|
-| **Hybrid Router** | `hybrid_router.py` | Classification SQL vs RAG avec seuil de confiance (0.80) |
-| **Entity Resolver** | `entity_resolver.py` | Fuzzy matching pour typos (Tiapam→Tiapoum) et alias partis |
-| **RAG Engine** | `rag_engine.py` | LlamaIndex + Gemini Embeddings avec retry exponentiel |
-| **Warmup Script** | `warmup.py` | Pré-construction index RAG au startup Docker |
-
-### Bonus Level 2 - Citations/Provenance
-**Statut** : Partiellement implémenté  
-Le `code_circonscription` est utilisé comme proxy pour la source. Les numéros de page PDF n'ont pas été extraits (pas eu le temps de modifier le script d'ingestion).
-
-## Performance Optimizations
-
-- **Architecture Dual-Modèle** : Réduction des appels LLM de 4 à 2 par question
-- **Smart Rendering** : Pas d'appel LLM depuis l'UI pour le choix de chart
-- **Streamlit Caching** : Client Ollama en cache pour réutilisation
-
-## Lancement Rapide (Docker)
-
-Le projet est entièrement conteneurisé pour garantir une reproductibilité stricte de l'environnement de développement.
-
-### Prérequis
-- Docker & Docker Compose
-- Une clé API Ollama Cloud (variable `OLLAMA_API_KEY`)
-
-### Procédure de déploiement
-
-1. **Préparation de l'environnement :**
-   ```bash
-   cp .env.example .env
-   # Éditer .env et renseigner OLLAMA_API_KEY
-   ```
-
-2. **Déploiement complet :**
-   ```bash
-   docker-compose up --build -d
-   ```
-
-3. **Accès aux services :**
-
-   | Service | URL | Description |
-   |---------|-----|-------------|
-   | Interface Web | http://localhost:8501 | Chatbot Streamlit avec visualisations |
-   | Base de données | localhost:5433 | PostgreSQL avec données électorales |
-   | pgAdmin | http://localhost:8080 | Interface SQL (admin@artefact.com / admin) |
-
-4. **Logs et debug :**
-   ```bash
-   # Voir les logs du service UI
-   docker-compose logs -f ui
-
-   # Voir les logs de l'ingestion
-   docker-compose logs -f ingestion
-   ```
-
-### Arrêt des services
-
-```bash
-docker-compose down
-# Pour supprimer les volumes (données) :
-docker-compose down -v
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│   Streamlit │────▶│  SQL Agent   │────▶│  PostgreSQL │
+│   (UI)      │     │  Hybrid/RAG  │     │  (vues      │
+└─────────────┘     └──────────────┘     │   sécurisées)│
+                                         └─────────────┘
 ```
 
-## Développement Local (hors Docker)
+**Stack** : Python, Streamlit, PostgreSQL, LlamaIndex, Ollama, Gemini
 
-Pour développer sans Docker :
+## Prérequis
+
+- Docker + Docker Compose
+- Clé API Ollama Cloud ([ollama.com](https://ollama.com))
+- Clé API Gemini ([aistudio.google.com](https://aistudio.google.com))
+
+## Déploiement
+
+### 1. Configuration
 
 ```bash
-# 1. Base de données
+cp .env.example .env
+# Éditez .env et ajoutez :
+# OLLAMA_API_KEY=votre_cle_ollama
+# GEMINI_API_KEY=votre_cle_gemini
+```
+
+### 2. Lancement
+
+```bash
+docker-compose up --build -d
+```
+
+**Important** : L'interface n'est pas immédiatement disponible. Au premier démarrage, le système :
+1. Ingeste les données PDF (~2 min)
+2. Construit l'index RAG (~1-2 min)
+
+Attendez environ 3-4 minutes avant d'accéder à l'interface.
+
+### 3. Vérification
+
+```bash
+# Voir la progression du démarrage
+docker-compose logs -f ui
+
+# Une fois que vous voyez "WARMUP COMPLET", l'interface est prête
+```
+
+### 4. Accès
+
+| Service | URL | Notes |
+|---------|-----|-------|
+| Interface chatbot | http://localhost:8501 | Disponible après le warmup |
+| Base de données | localhost:5433 | PostgreSQL avec données électorales |
+| pgAdmin | http://localhost:8080 | Login: admin@artefact.com / admin |
+
+## Utilisation
+
+Posez des questions en langage naturel :
+
+- **SQL** : "Quel candidat a gagné à Abidjan ?"
+- **RAG** : "Résume les résultats de cette élection"
+- **Visualisations** : "Montre-moi le top 10 des partis par sièges"
+
+Le système détecte automatiquement s'il doit utiliser SQL (chiffres précis) ou RAG (résumés).
+
+## Structure du projet
+
+```
+app/
+├── sql_agent.py        # Orchestrateur principal (SQL + hybrid)
+├── hybrid_router.py    # Décision SQL vs RAG
+├── entity_resolver.py  # Correction typos (Tiapam → Tiapoum)
+├── rag_engine.py       # Index et recherche vectorielle
+└── ui.py               # Interface Streamlit
+
+ingestion/
+└── ingest.py           # Pipeline PDF → PostgreSQL
+
+tests/
+├── level_1/            # Tests guardrails + intent router
+└── level_2/            # Tests hybrid + entity + RAG
+```
+
+## Level 1 - SQL Agent (Terminé)
+
+- Pipeline ELT : PDF → PostgreSQL avec vues sécurisées
+- Guardrails : blocage DDL/DML, LIMIT auto, timeout 5s
+- Détection hors-domaine (météo, présidentielles...)
+- Résistance aux injections SQL et prompt injection
+
+## Level 2 - Hybrid Router + RAG (Terminé)
+
+- Routing automatique SQL vs RAG (seuil de confiance 0.80)
+- Fuzzy matching pour les typos et alias de partis
+- Index vectoriel avec Gemini Embeddings + retry
+- Warmup automatique au démarrage Docker
+
+## Limitations connues
+
+- L'index RAG est reconstruit à chaque démarrage (pas de persistance)
+- Premier démarrage lent (~4 min) à cause de l'ingestion + warmup
+- Fallback MD5 sur les embeddings si Gemini API indisponible
+
+## Développement local
+
+```bash
+# Base de données
 docker-compose up -d db
 
-# 2. Ingestion des données
+# Ingestion
 pip install -r requirements.txt
 python ingestion/ingest.py
 
-# 3. Lancer l'UI
+# Lancer l'UI
 streamlit run app/ui.py
 ```
 
-## Structure du Projet
+## Tests
 
-```
-artefact/
-├── app/
-│   ├── sql_agent.py          # Agent Text-to-SQL avec architecture dual-modèle
-│   ├── hybrid_router.py      # Router SQL vs RAG avec classification par LLM
-│   ├── entity_resolver.py    # Fuzzy matching pour typos et alias
-│   ├── rag_engine.py         # Moteur RAG LlamaIndex + Gemini Embeddings
-│   ├── warmup.py             # Pré-construction index RAG (Docker startup)
-│   └── ui.py                 # Interface Streamlit avec Smart Rendering
-├── ingestion/
-│   ├── ingest.py             # Pipeline ELT PDF → PostgreSQL
-│   └── init_views.sql        # Vues métier et sécurité RBAC
-├── source_files/
-│   └── EDAN_2025_*.pdf       # Données sources
-├── entrypoint.sh             # Script d'entrée Docker (warmup + streamlit)
-├── Dockerfile                # Image Docker production-ready
-├── docker-compose.yml        # Orchestration multi-services
-└── requirements.txt          # Dépendances Python
+```bash
+# Tous les tests
+pytest tests/
+
+# Par niveau
+pytest tests/level_1/
+pytest tests/level_2/
 ```
 
-## Problèmes Connus / Limitations
-
-- **Warmup RAG** : L'index est reconstruit à chaque démarrage du container (pas de persistance volume)
-- **Fallback Embeddings** : Si Gemini API indisponible, utilise un hash MD5 (précision réduite)
-- **Timeout Ollama** : Pas de timeout explicite sur les appels LLM (dépend du timeout Streamlit)
-- **Clarification UI** : Le state de clarification parfois persiste mal entre les questions
-
-## Licence
+---
 
 Projet développé pour le test technique Artefact.

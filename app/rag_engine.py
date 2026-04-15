@@ -263,20 +263,22 @@ class RAGEngine:
 
     def _build_index(self) -> None:
         """Construit l'index vectoriel avec Gemini Embeddings."""
-        print("🔄 Construction de l'index RAG avec Gemini...")
+        if self._index_built:
+            return
+
+        print("Construction de l'index RAG...")
 
         try:
-            # Initialise l'embed model (avec fallback si besoin)
             get_embed_model()
         except Exception as e:
-            print(f"⚠️ Impossible d'initialiser les embeddings: {e}")
+            print(f"Impossible d'initialiser les embeddings: {e}")
             return
 
         election_docs = self._fetch_election_data()
-        print(f"📄 {len(election_docs)} documents électoraux chargés")
+        print(f"{len(election_docs)} documents électoraux chargés")
 
         if not election_docs:
-            print("⚠️ Aucun document à indexer")
+            print("Aucun document à indexer")
             return
 
         self.documents = [
@@ -297,7 +299,7 @@ class RAGEngine:
 
             self.index = VectorStoreIndex(nodes)
             self._index_built = True
-            print("✅ Index RAG construit avec succès")
+            print("Index RAG construit avec succès")
         except Exception as e:
             import logging
             logging.error(f"Erreur construction index: {e}")
