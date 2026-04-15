@@ -9,3 +9,8 @@ python-dotenv
 ollama
 streamlit
 plotly
+thefuzz
+
+# Level 2: RAG with LlamaIndex (Gemini via google-genai)
+llama-index
+google-genai

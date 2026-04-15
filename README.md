@@ -42,6 +42,27 @@ La couche d'orchestration Text-to-SQL est développée en Python standard ("Vani
 | **B - Hors Domaine** | Détection et rejet des questions hors dataset (présidentielles, météo) | `sql_agent.py:ROUTER_PROMPT` |
 | **C - Adversarial** | Résistance aux prompt injections et tentatives d'exfiltration | `sql_agent.py:analyze_intent()` |
 
+## Level 2 - Hybrid Router (SQL + RAG)
+
+### Architecture Hybride
+Le système route automatiquement les questions vers le bon moteur selon l'intention :
+- **Route SQL** : Questions analytiques (chiffres, comptages, classements, pourcentages)
+- **Route RAG** : Questions narratives (résumés, explications, contexte qualitatif)
+- **Route Clarification** : Questions ambiguës avec demande de précision à l'utilisateur
+
+### Composants Implémentés
+
+| Composant | Fichier | Description |
+|-----------|---------|-------------|
+| **Hybrid Router** | `hybrid_router.py` | Classification SQL vs RAG avec seuil de confiance (0.80) |
+| **Entity Resolver** | `entity_resolver.py` | Fuzzy matching pour typos (Tiapam→Tiapoum) et alias partis |
+| **RAG Engine** | `rag_engine.py` | LlamaIndex + Gemini Embeddings avec retry exponentiel |
+| **Warmup Script** | `warmup.py` | Pré-construction index RAG au startup Docker |
+
+### Bonus Level 2 - Citations/Provenance
+**Statut** : 🟡 Partiellement implémenté  
+Le `code_circonscription` est utilisé comme proxy pour la source. Les numéros de page PDF n'ont pas été extraits (pas eu le temps de modifier le script d'ingestion).
+
 ## Performance Optimizations
 
 - **Architecture Dual-Modèle** : Réduction des appels LLM de 4 à 2 par question
@@ -116,16 +137,28 @@ streamlit run app/ui.py
 artefact/
 ├── app/
 │   ├── sql_agent.py          # Agent Text-to-SQL avec architecture dual-modèle
+│   ├── hybrid_router.py      # Router SQL vs RAG avec classification par LLM
+│   ├── entity_resolver.py    # Fuzzy matching pour typos et alias
+│   ├── rag_engine.py         # Moteur RAG LlamaIndex + Gemini Embeddings
+│   ├── warmup.py             # Pré-construction index RAG (Docker startup)
 │   └── ui.py                 # Interface Streamlit avec Smart Rendering
 ├── ingestion/
 │   ├── ingest.py             # Pipeline ELT PDF → PostgreSQL
 │   └── init_views.sql        # Vues métier et sécurité RBAC
 ├── source_files/
 │   └── EDAN_2025_*.pdf       # Données sources
+├── entrypoint.sh             # Script d'entrée Docker (warmup + streamlit)
 ├── Dockerfile                # Image Docker production-ready
 ├── docker-compose.yml        # Orchestration multi-services
-└── requirements.txt        # Dépendances Python
+└── requirements.txt          # Dépendances Python
 ```
+
+## Problèmes Connus / Limitations
+
+- **Warmup RAG** : L'index est reconstruit à chaque démarrage du container (pas de persistance volume)
+- **Fallback Embeddings** : Si Gemini API indisponible, utilise un hash MD5 (précision réduite)
+- **Timeout Ollama** : Pas de timeout explicite sur les appels LLM (dépend du timeout Streamlit)
+- **Clarification UI** : Le state de clarification parfois persiste mal entre les questions
 
 ## Licence
 

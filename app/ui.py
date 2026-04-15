@@ -7,8 +7,19 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Import du backend SQL agent
-from sql_agent import ask_database
+# Import du backend hybrid agent (SQL + RAG)
+# Gestion des différents contextes d'exécution (local vs Docker)
+import sys
+from pathlib import Path
+
+# Ajoute le répertoire parent au path si nécessaire (pour exécution locale)
+current_dir = Path(__file__).parent
+parent_dir = current_dir.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
+
+# Import après ajustement du path
+from app.sql_agent import ask_hybrid
 
 
 # =============================================================================
@@ -352,32 +363,68 @@ def render_chart(data: list, chart_type: str, question: str, sql: str = "") -> N
 
 def render_bot_response(response: dict, question: str) -> None:
     """
-    Affiche la réponse complète du bot avec narrative, SQL et visualisation.
+    Affiche la réponse complète du bot selon le type de route (SQL, RAG, clarification).
 
     Args:
-        response: Dictionnaire retourné par ask_database()
+        response: Dictionnaire retourné par ask_hybrid()
         question: Question posée par l'utilisateur
     """
-    # Affichage de la réponse narrative
+    route = response.get("route", "sql")
+
+    # Affichage de la réponse narrative (commun à tous les types)
     if response.get("narrative"):
         st.markdown(response["narrative"])
 
-    # Affichage du SQL dans un expander
-    if response.get("sql"):
-        with st.expander("Voir la requête SQL générée"):
-            st.code(response["sql"], language="sql")
+    # Route SQL: afficher SQL + données + visualisations
+    if route == "sql":
+        # Affichage du SQL dans un expander
+        if response.get("sql"):
+            with st.expander("Voir la requête SQL générée"):
+                st.code(response["sql"], language="sql")
 
-    # Affichage des données et visualisation
-    data = response.get("data", [])
-    sql_query = response.get("sql", "")
-    if data and len(data) > 0:
-        if len(data) == 1:
-            # Une seule valeur - afficher en grand sans tableau
-            render_single_value(data[0])
-        else:
-            # Plusieurs lignes - afficher selon le choix du backend et la taille
-            chart_type = response.get("chart_type", "table")
-            render_chart(data, chart_type, question, sql_query)
+        # Affichage des données et visualisation
+        data = response.get("data", [])
+        sql_query = response.get("sql", "")
+        if data and len(data) > 0:
+            if len(data) == 1:
+                # Une seule valeur - afficher en grand sans tableau
+                render_single_value(data[0])
+            else:
+                # Plusieurs lignes - afficher selon le choix du backend et la taille
+                chart_type = response.get("chart_type", "table")
+                render_chart(data, chart_type, question, sql_query)
+
+    # Route RAG: afficher les informations sur les sources
+    elif route == "rag":
+        # Affichage des régions sources si disponibles
+        source_regions = response.get("source_regions", [])
+        source_circonscriptions = response.get("source_circonscriptions", [])
+
+        if source_regions or source_circonscriptions:
+            with st.expander("Sources documentaires"):
+                if source_regions:
+                    st.caption(f"Régions couvertes: {', '.join(source_regions)}")
+                if source_circonscriptions:
+                    st.caption(f"Circonscriptions: {', '.join(source_circonscriptions[:5])}")
+                    if len(source_circonscriptions) > 5:
+                        st.caption(f"... et {len(source_circonscriptions) - 5} autres")
+
+    # Route clarification: afficher les boutons de choix
+    elif route == "clarification":
+        st.markdown("*Veuillez préciser votre préférence:*")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Données précises (SQL)", key=f"clarify_sql_{question[:20]}"):
+                # Stocker la préférence et relancer la question
+                st.session_state.clarification_preference = "sql"
+                st.session_state.pending_question = question
+                st.rerun()
+        with col2:
+            if st.button("Résumé narratif (RAG)", key=f"clarify_rag_{question[:20]}"):
+                st.session_state.clarification_preference = "rag"
+                st.session_state.pending_question = question
+                st.rerun()
 
 
 # =============================================================================
@@ -402,33 +449,43 @@ def render_sidebar():
     """Affiche la barre latérale avec informations et exemples."""
     with st.sidebar:
         st.title("🗳️ CI Elections")
-        st.markdown("---")
-
-        st.subheader("À propos")
-        st.markdown("""
-        Agent d'analyse électorale pour les élections locales ivoiriennes.
-
-        **Fonctionnalités:**
-        - Questions en langage naturel
-        - Génération automatique de SQL
-        - Visualisations intelligentes
-        - Sécurité renforcée (accès lecture seule)
+        st.info("""
+        💡 **Le système choisit automatiquement** :
+        - **Route SQL** pour les chiffres précis (combien, top, liste)
+        - **Route RAG** pour les résumés et analyses
         """)
 
         st.markdown("---")
 
         st.subheader("Exemples de questions")
-        example_questions = [
+
+        # Questions SQL (données précises)
+        st.markdown("**📊 Analytiques (chiffres précis):**")
+        sql_examples = [
             "Quel est le candidat qui a gagné à Abidjan ?",
             "Quels sont les partis avec le plus de sièges ?",
             "Montre-moi le taux de participation par région",
             "Combien de bulletins nuls ont été enregistrés ?",
-            "Quel candidat a obtenu le plus de voix au sud ?",
             "Liste des élus du parti RHDP"
         ]
+        for q in sql_examples:
+            if st.button(f"🔢 {q}", key=f"sql_{q[:20]}"):
+                st.session_state.suggested_question = q
+                st.rerun()
 
-        for q in example_questions:
-            if st.button(f"💬 {q}", key=f"btn_{q[:20]}"):
+        st.markdown("---")
+
+        # Questions RAG (narratives)
+        st.markdown("**📝 Narratives (résumés et analyses):**")
+        rag_examples = [
+            "Résume les résultats électoraux de Tiapoum",
+            "Donne un aperçu des tendances par région",
+            "Explique la répartition géographique des votes",
+            "Quels sont les faits marquants de cette élection ?",
+            "Raconte ce qui s'est passé à Korhogo"
+        ]
+        for q in rag_examples:
+            if st.button(f"📖 {q}", key=f"rag_{q[:20]}"):
                 st.session_state.suggested_question = q
                 st.rerun()
 
@@ -489,7 +546,7 @@ def render_chat_history():
 
 def handle_user_input(prompt: str):
     """
-    Traite la question de l'utilisateur et génère une réponse.
+    Traite la question de l'utilisateur et génère une réponse via le router hybride.
 
     Args:
         prompt: Question posée par l'utilisateur
@@ -501,11 +558,17 @@ def handle_user_input(prompt: str):
     with st.chat_message("user"):
         st.markdown(prompt)
 
+    # Détection d'une préférence de clarification (si l'utilisateur a cliqué sur un bouton)
+    preference = None
+    if "clarification_preference" in st.session_state:
+        preference = st.session_state.clarification_preference
+        del st.session_state.clarification_preference
+
     # Génération de la réponse
     with st.chat_message("assistant"):
         with st.spinner("Analyse de votre question..."):
             try:
-                response = ask_database(prompt)
+                response = ask_hybrid(prompt, preference=preference)
 
                 # Gestion des erreurs
                 if response.get("status") == "error":
@@ -521,7 +584,7 @@ def handle_user_input(prompt: str):
                 })
 
             except Exception as e:
-                error_msg = f"Désolé, une erreur technique est survenue. Veuillez réessayer."
+                error_msg = "Désolé, une erreur technique est survenue. Veuillez réessayer."
                 st.error(f"⚠️ {error_msg}")
 
                 st.session_state.messages.append({
@@ -555,6 +618,13 @@ def main():
 
     # Affichage de l'historique
     render_chat_history()
+
+    # Gestion d'une question en attente (clarification)
+    if "pending_question" in st.session_state:
+        pending = st.session_state.pending_question
+        del st.session_state.pending_question
+        handle_user_input(pending)
+        return
 
     # Zone de saisie utilisateur
     user_input = st.chat_input("Posez votre question sur les élections...")

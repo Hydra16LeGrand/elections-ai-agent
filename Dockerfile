@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
     ghostscript \
     libgl1 \
     libglib2.0-0 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -20,5 +21,9 @@ EXPOSE 8501
 # Healthcheck pour Streamlit
 HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health || exit 1
 
-# Commande par défaut : lancer l'interface Streamlit
-CMD ["streamlit", "run", "app/ui.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Rendre l'entrypoint exécutable
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Commande par défaut : warmup puis Streamlit
+ENTRYPOINT ["/entrypoint.sh"]

@@ -301,7 +301,7 @@ def ask_database(user_question: str) -> dict:
 # HYBRID ROUTER - LEVEL 2
 # =====================================================================================
 
-def ask_hybrid(user_question: str) -> dict:
+def ask_hybrid(user_question: str, preference: str = None) -> dict:
     """
     Point d'entrée hybride (Level 2).
 
@@ -312,6 +312,7 @@ def ask_hybrid(user_question: str) -> dict:
 
     Args:
         user_question: Question en langage naturel
+        preference: Préférence utilisateur si clarification ("sql" ou "rag")
 
     Returns:
         Réponse structurée (status, narrative, data, sql, chart_type, route)
@@ -322,6 +323,21 @@ def ask_hybrid(user_question: str) -> dict:
 
     if entity_metadata["replacements"]:
         print(f"🔄 [Entity Resolver] Corrections: {entity_metadata['replacements']}")
+
+    # Si une préférence est spécifiée (après clarification), forcer la route
+    if preference == "sql":
+        result = ask_database(corrected_question)
+        result["route"] = "sql"
+        result["confidence"] = 1.0
+        result["narrative"] = f"[Préférence SQL] {result['narrative']}"
+        return result
+    elif preference == "rag":
+        from .rag_engine import query_rag
+        result = query_rag(corrected_question)
+        result["route"] = "rag"
+        result["confidence"] = 1.0
+        result["narrative"] = f"[Préférence RAG] {result['narrative']}"
+        return result
 
     # ÉTAPE 2: Classification (SQL vs RAG)
     routing_result = route_with_fallback(corrected_question)
@@ -345,14 +361,13 @@ def ask_hybrid(user_question: str) -> dict:
         result["confidence"] = routing_result["confidence"]
         return result
 
-    # CAS C: Route RAG (placeholder pour Étape 3)
+    # CAS C: Route RAG
     if routing_result["route"] == "rag":
-        # TODO: Appeler le moteur RAG quand il sera implémenté
-        # Pour l'instant, fallback sur SQL avec message informatif
-        result = ask_database(corrected_question)
-        result["route"] = "rag_fallback"
+        # Import et appel du moteur RAG
+        from .rag_engine import query_rag
+        result = query_rag(corrected_question)
+        result["route"] = "rag"
         result["confidence"] = routing_result["confidence"]
-        result["narrative"] = f"[Route RAG demandée - En cours d'implémentation]\n\n{result['narrative']}"
         return result
 
     # Fallback sécurisé

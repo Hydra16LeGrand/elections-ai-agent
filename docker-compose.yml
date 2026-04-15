@@ -44,8 +44,9 @@ services:
     depends_on:
       - ingestion
     environment:
-      AGENT_DB_URL: postgresql://artefact_reader:reader_password@db:5432/elections_db
+      AGENT_DB_URL: postgresql://artefact_user:artefact_password@db:5432/elections_db
       OLLAMA_API_KEY: ${OLLAMA_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:
       - ./app:/app/app
     healthcheck:
