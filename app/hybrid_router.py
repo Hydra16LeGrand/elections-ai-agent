@@ -6,6 +6,7 @@ import re
 from typing import Dict, Optional
 from ollama import Client
 from dotenv import load_dotenv
+from app.entity_resolver import EntityResolver, get_resolver
 
 load_dotenv()
 
@@ -79,6 +80,41 @@ Génère une question de clarification courte et polie pour demander à l'utilis
 Réponds UNIQUEMENT avec la question de clarification, sans autre texte.
 """
 
+ENTITY_CLARIFICATION_PROMPT = """L'utilisateur a mentionné une localité qui existe dans plusieurs régions.
+
+Localité : {locality}
+Régions disponibles : {regions}
+
+Génère une question de clarification courte et polie pour demander à l'utilisateur de préciser quelle région il souhaite.
+
+Réponds UNIQUEMENT avec la question de clarification, sans autre texte.
+"""
+
+
+def detect_entity_ambiguity(question: str) -> Optional[dict]:
+    """Détecte si une entité dans la question est ambiguë."""
+    resolver = get_resolver()
+
+    words = question.split()
+    for word in words:
+        if len(word) < 3:
+            continue
+
+        resolved, score = resolver.resolve_locality(word)
+        if score < 80:
+            continue
+
+        is_ambig, regions = resolver.is_ambiguous("locality", resolved)
+        if is_ambig:
+            return {
+                "ambiguous": True,
+                "entity_type": "locality",
+                "entity_value": resolved,
+                "options": regions
+            }
+
+    return None
+
 
 def classify_question(question: str) -> Dict[str, any]:
     """Classe une question en SQL, RAG ou AMBIGUOUS."""
@@ -145,6 +181,17 @@ def ask_clarification(question: str) -> str:
 
 def route_with_fallback(question: str) -> Dict[str, any]:
     """Route une question avec fallback sur clarification si confiance faible."""
+    # Vérifier les ambiguïtés d'entités avant la classification
+    ambiguity = detect_entity_ambiguity(question)
+    if ambiguity:
+        return {
+            "route": "entity_clarification",
+            "entity_type": ambiguity["entity_type"],
+            "entity_value": ambiguity["entity_value"],
+            "options": ambiguity["options"],
+            "clarification_question": f"Dans quelle région se trouve {ambiguity['entity_value']} ?"
+        }
+
     classification = classify_question(question)
     route = classification["route"]
     confidence = classification["confidence"]

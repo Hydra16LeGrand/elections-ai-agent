@@ -79,6 +79,10 @@ Le système détecte automatiquement s'il doit utiliser SQL (chiffres précis) o
 
 **Recherche flexible** : Les questions peuvent mentionner une région ou une circonscription sans préciser. Le système recherche automatiquement dans les deux champs (ex: "Abidjan" trouve toutes les circonscriptions du district).
 
+**Clarification automatique** : Questions ambiguës (ex: "Qui a gagné ?") déclenchent une demande de précision (données chiffrées ou résumé narratif).
+
+**Session Memory** : Après une requête sur "Tiapoum", la question "Et à Tiapoum ?" est automatiquement enrichie avec le contexte (région connue).
+
 ## Structure du projet
 
 ```
@@ -94,7 +98,8 @@ ingestion/
 
 tests/
 ├── level_1/            # Tests guardrails + intent router
-└── level_2/            # Tests hybrid + entity + RAG
+├── level_2/            # Tests hybrid + entity + RAG
+└── level_3/            # Tests session memory + entity ambiguity
 ```
 
 ## Level 1 - SQL Agent (Terminé)
@@ -110,6 +115,12 @@ tests/
 - Fuzzy matching pour les typos et alias de partis
 - Index vectoriel avec Gemini Embeddings + retry
 - Warmup automatique au démarrage Docker
+
+## Level 3 - Clarification + Session Memory (Partiel)
+
+- Détection d'ambiguïté et questions de clarification
+- Stockage automatique des entités des résultats SQL
+- Enrichissement des questions de suivi avec le contexte
 
 ## Limitations connues
 
@@ -134,12 +145,17 @@ streamlit run app/ui.py
 ## Tests
 
 ```bash
-# Tous les tests
+# Tous les tests (rapides, sans appels LLM)
 pytest tests/
 
 # Par niveau
 pytest tests/level_1/
 pytest tests/level_2/
+pytest tests/level_3/
+
+# Tests d'intégration (avec appels LLM réels, lents)
+./run_integration_tests.sh
+# Ou: pytest tests/integration/ -m "integration and slow"
 ```
 
 ---

@@ -201,6 +201,27 @@ class EntityResolver:
 
         return corrected, metadata
 
+    def get_locality_regions(self, locality: str) -> List[str]:
+        """Retourne toutes les régions où cette localité existe."""
+        try:
+            with self.engine.connect() as conn:
+                result = conn.execute(
+                    text("SELECT DISTINCT region FROM vw_results_clean WHERE nom_circonscription = :locality"),
+                    {"locality": locality}
+                )
+                return [row[0] for row in result if row[0]]
+        except Exception:
+            return []
+
+    def is_ambiguous(self, entity_type: str, value: str) -> Tuple[bool, List[str]]:
+        """Détecte si une entité est ambiguë (existe dans plusieurs contextes)."""
+        if entity_type == "locality":
+            regions = self.get_locality_regions(value)
+            if len(regions) > 1:
+                return True, regions
+            return False, regions
+        return False, []
+
 
 _resolver_instance: Optional[EntityResolver] = None
 
