@@ -13,6 +13,7 @@ if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
 from app.sql_agent import ask_hybrid
+from app.session_memory import get_session_memory
 
 def render_single_value(data: dict) -> None:
     """Affiche une valeur unique agrégée dans une carte visuelle."""
@@ -338,6 +339,47 @@ def render_chart(data: list, chart_type: str, question: str, sql: str = "") -> N
 # FONCTION DE RENDU D'UN MESSAGE DU BOT
 # =============================================================================
 
+def handle_entity_clarification(response: dict, question: str) -> None:
+    """
+    Affiche les options de clarification pour une entité ambiguë.
+    Stocke le choix dans session_memory et relance la question.
+
+    Args:
+        response: Dictionnaire contenant entity_type, entity_value, options
+        question: Question originale de l'utilisateur
+    """
+    entity_type = response.get("entity_type", "entité")
+    entity_value = response.get("entity_value", "")
+    options = response.get("options", [])
+    clarification_question = response.get(
+        "clarification_question",
+        f"Plusieurs options trouvées pour '{entity_value}'. Laquelle ?"
+    )
+
+    st.markdown(f"**{clarification_question}**")
+
+    # Créer un bouton pour chaque option
+    for option in options:
+        if st.button(option, key=f"entity_{entity_type}_{option}_{question[:10]}"):
+            # Stocker le choix dans session_memory
+            session_mem = get_session_memory()
+            session_mem.store(
+                entity_type,
+                entity_value,
+                {"resolved_to": option, "region": option}
+            )
+
+            # Stocker aussi dans st.session_state pour enrich_question_with_context
+            if "entity_resolutions" not in st.session_state:
+                st.session_state.entity_resolutions = {}
+            # Normaliser la clé en majuscule pour matcher les questions futures
+            st.session_state.entity_resolutions[entity_value.upper()] = option
+
+            # Relancer la question originale
+            st.session_state.pending_question = question
+            st.rerun()
+
+
 def render_bot_response(response: dict, question: str) -> None:
     """
     Affiche la réponse complète du bot selon le type de route (SQL, RAG, clarification).
@@ -386,7 +428,7 @@ def render_bot_response(response: dict, question: str) -> None:
                     if len(source_circonscriptions) > 5:
                         st.caption(f"... et {len(source_circonscriptions) - 5} autres")
 
-    # Route clarification: afficher les boutons de choix
+    # Route clarification SQL/RAG: afficher les boutons de choix
     elif route == "clarification":
         st.markdown("*Veuillez préciser votre préférence:*")
 
@@ -402,6 +444,10 @@ def render_bot_response(response: dict, question: str) -> None:
                 st.session_state.clarification_preference = "rag"
                 st.session_state.pending_question = question
                 st.rerun()
+
+    # Route entity_clarification: afficher les options pour résoudre l'ambiguité
+    elif route == "entity_clarification":
+        handle_entity_clarification(response, question)
 
 
 # =============================================================================
@@ -521,6 +567,63 @@ def render_chat_history():
 # GESTION DE LA QUESTION UTILISATEUR
 # =============================================================================
 
+def _store_entities_from_results(data: list) -> None:
+    """Extrait et stocke les entités (région, localité) des résultats SQL."""
+    if not data:
+        return
+
+    session_mem = get_session_memory()
+
+    for row in data:
+        locality = row.get("nom_circonscription")
+        region = row.get("region")
+
+        if locality and region:
+            # Stocker le nom complet pour matching futur
+            session_mem.store("locality", locality, {"region": region})
+
+            if "entity_resolutions" not in st.session_state:
+                st.session_state.entity_resolutions = {}
+            st.session_state.entity_resolutions[locality.upper()] = region
+
+
+def enrich_question_with_context(question: str) -> str:
+    """Enrichit la question avec les entités déjà résolues en session."""
+    if "entity_resolutions" not in st.session_state:
+        return question
+
+    resolutions = st.session_state.entity_resolutions
+    if not resolutions:
+        return question
+
+    # Utiliser EntityResolver pour trouver les entités dans la question
+    from app.entity_resolver import get_resolver
+    resolver = get_resolver()
+
+    # Chercher chaque mot de la question dans les entités connues
+    words = question.split()
+    context_parts = []
+
+    for word in words:
+        if len(word) < 3:
+            continue
+
+        # Essayer de résoudre comme localité
+        resolved, score = resolver.resolve_locality(word)
+        if score >= 80:
+            # Chercher si cette localité a une région stockée
+            resolved_upper = resolved.upper()
+            if resolved_upper in resolutions:
+                region = resolutions[resolved_upper]
+                context_parts.append(f"{resolved} se trouve en région {region}")
+
+    if context_parts:
+        context_str = "; ".join(context_parts)
+        return f"{question} (contexte: {context_str})"
+
+    return question
+
+
 def handle_user_input(prompt: str):
     """
     Traite la question de l'utilisateur et génère une réponse via le router hybride.
@@ -541,17 +644,23 @@ def handle_user_input(prompt: str):
         preference = st.session_state.clarification_preference
         del st.session_state.clarification_preference
 
+    # Enrichir la question avec les entités déjà résolues en session
+    enriched_prompt = enrich_question_with_context(prompt)
+
     # Génération de la réponse
     with st.chat_message("assistant"):
         with st.spinner("Analyse de votre question..."):
             try:
-                response = ask_hybrid(prompt, preference=preference)
+                response = ask_hybrid(enriched_prompt, preference=preference)
 
                 # Gestion des erreurs
                 if response.get("status") == "error":
                     st.error(f"⚠️ {response.get('narrative', 'Une erreur est survenue')}")
                 else:
                     render_bot_response(response, prompt)
+                    # Stocker les entités des résultats SQL pour enrichir les questions futures
+                    if response.get("route") == "sql" and response.get("data"):
+                        _store_entities_from_results(response["data"])
 
                 # Ajout à l'historique
                 st.session_state.messages.append({
