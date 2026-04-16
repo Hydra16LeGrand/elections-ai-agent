@@ -82,7 +82,7 @@ Le système détecte automatiquement s'il doit utiliser SQL (chiffres précis) o
 
 **Recherche flexible** : Les questions peuvent mentionner une région ou une circonscription sans préciser. Le système recherche automatiquement dans les deux champs (ex: "Abidjan" trouve toutes les circonscriptions du district).
 
-**Clarification automatique** : Questions ambiguës (ex: "Qui a gagné ?") déclenchent une demande de précision (données chiffrées ou résumé narratif).
+**Clarification automatique** : Questions ambiguës (ex: "Qui a gagné ?") déclenchent une demande de précision (données chiffrées ou résumé narratif). Les entités ambiguës (localité existant dans plusieurs régions) déclenchent une question de clarification.
 
 **Session Memory** : Après une requête sur "Tiapoum", la question "Et à Tiapoum ?" est automatiquement enrichie avec le contexte (région connue).
 
@@ -98,6 +98,11 @@ app/
 
 ingestion/
 └── ingest.py           # Pipeline PDF → PostgreSQL
+
+## Limitations connues
+
+- **Entity resolution SQL** : La correction automatique des typos (ex: "Tiapam" → "Tiapoum") n'est implémentée que pour la détection d'ambiguïté et le RAG, pas pour la génération SQL. Pour les requêtes SQL, utilisez l'orthographe exacte des localités.
+- **Citations/provenance** : Les réponses RAG n'indiquent pas la page ou le tableau source (nécessiterait une refonte de l'ingestion).
 
 tests/
 ├── level_1/            # Tests guardrails + intent router
