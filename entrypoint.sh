@@ -1,20 +1,42 @@
 #!/bin/bash
 set -e
 
-echo "=========================================="
-echo "Entrypoint - Démarrage du service"
-echo "=========================================="
+LOG_FILE="/app/ingestion/init.log"
 
-# Exécute le warmup pour pré-construire l'index RAG
-echo "🔧 Phase 1: Warmup (pré-construction de l'index RAG)..."
-python app/warmup.py || {
-    echo "⚠️ Warmup échoué, mais on continue..."
+# Ensure log directory exists
+mkdir -p /app/ingestion
+touch "$LOG_FILE"
+
+# Function to log to both stdout and file
+log() {
+    echo "$@" | tee -a "$LOG_FILE"
 }
 
-echo ""
-echo "=========================================="
-echo "🚀 Phase 2: Démarrage de Streamlit"
-echo "=========================================="
+# Check if this is the ingestion service (command contains ingest.py)
+if [[ "$*" == *"ingest.py"* ]]; then
+    log "=========================================="
+    log "Entrypoint - Ingestion Mode"
+    log "=========================================="
+    log "Executing: $@"
+    exec "$@"
+fi
 
-# Lance Streamlit avec les arguments passés
+# Standard UI mode
+log "=========================================="
+log "Entrypoint - Service startup"
+log "=========================================="
+log "Logs also written to: $LOG_FILE"
+
+# Run warmup to pre-build RAG index
+log "🔧 Phase 1: Warmup (pre-building RAG index)..."
+python app/warmup.py 2>&1 | tee -a "$LOG_FILE" || {
+    log "⚠️ Warmup failed, but continuing..."
+}
+
+log ""
+log "=========================================="
+log "🚀 Phase 2: Starting Streamlit"
+log "=========================================="
+
+# Start Streamlit
 exec streamlit run app/ui.py --server.port=8501 --server.address=0.0.0.0 "$@"

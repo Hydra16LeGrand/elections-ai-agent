@@ -142,7 +142,7 @@ class ElectionDocument:
 
 DB_URL = os.environ.get(
     "AGENT_DB_URL",
-    "postgresql://artefact_reader:reader_password@localhost:5433/elections_db"
+    "postgresql://artefact_reader:reader_password@db:5432/elections_db"
 )
 engine = create_engine(DB_URL)
 
@@ -424,6 +424,13 @@ _rag_engine_lock = threading.Lock()
 _rag_engine_instance: Optional[RAGEngine] = None
 
 
+def set_rag_engine_instance(engine: RAGEngine):
+    """Stocke l'instance RAG pré-construite (appelé par warmup)."""
+    global _rag_engine_instance
+    with _rag_engine_lock:
+        _rag_engine_instance = engine
+
+
 def get_rag_engine() -> RAGEngine:
     """
     Retourne l'instance singleton du moteur RAG (thread-safe).
@@ -433,8 +440,7 @@ def get_rag_engine() -> RAGEngine:
     if _rag_engine_instance is None:
         with _rag_engine_lock:
             if _rag_engine_instance is None:
-                # Skip build at startup to speed up cold start
-                _rag_engine_instance = RAGEngine(skip_index_build=True)
+                _rag_engine_instance = RAGEngine(skip_index_build=False)
     return _rag_engine_instance
 
 

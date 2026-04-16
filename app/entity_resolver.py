@@ -18,7 +18,7 @@ class EntityResolver:
         """Initialise le résolveur avec les données de la base."""
         self.db_url = db_url or os.environ.get(
             "AGENT_DB_URL",
-            "postgresql://artefact_reader:reader_password@localhost:5433/elections_db"
+            "postgresql://artefact_reader:reader_password@db:5432/elections_db"
         )
         self.engine = create_engine(self.db_url)
 

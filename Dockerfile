@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
+# Create ingestion log file
+RUN mkdir -p /app/ingestion && touch /app/ingestion/init.log
+
 # Exposition du port Streamlit
 EXPOSE 8501
 

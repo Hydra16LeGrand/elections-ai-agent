@@ -9,6 +9,7 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./ingestion/init_db.sh:/docker-entrypoint-initdb.d/01_init_db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U artefact_user -d elections_db"]
       interval: 5s
@@ -36,15 +37,22 @@ services:
     volumes:
       - ./ingestion:/app/ingestion
       - ./source_files:/app/source_files
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import psycopg2; conn=psycopg2.connect(\"postgresql://artefact_user:artefact_password@db:5432/elections_db\"); cur=conn.cursor(); cur.execute(\"SELECT 1 FROM vw_results_clean LIMIT 1\"); cur.fetchone()'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   ui:
     build: .
     ports:
       - "8501:8501"
     depends_on:
-      - ingestion
+      ingestion:
+        condition: service_completed_successfully
     environment:
-      AGENT_DB_URL: postgresql://artefact_user:artefact_password@db:5432/elections_db
+      AGENT_DB_URL: postgresql://artefact_reader:reader_password@db:5432/elections_db
       OLLAMA_API_KEY: ${OLLAMA_API_KEY}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
     volumes:

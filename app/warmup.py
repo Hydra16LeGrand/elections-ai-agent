@@ -19,12 +19,13 @@ def warmup_rag():
     try:
         logger.info("Warmup: Pré-construction de l'index RAG...")
 
-        from app.rag_engine import RAGEngine
+        from app.rag_engine import RAGEngine, set_rag_engine_instance
 
         engine = RAGEngine(skip_index_build=False)
 
         if engine.index is not None:
-            logger.info("Warmup: Index RAG construit avec succès")
+            set_rag_engine_instance(engine)
+            logger.info("Warmup: Index RAG construit et stocké avec succès")
             return True
         else:
             logger.warning("Warmup: Index non construit, mode dégradé")
@@ -43,9 +44,11 @@ def warmup_sql_agent():
 
         from sqlalchemy import create_engine, text
 
+        # Utiliser DATABASE_URL (artefact_user) pour la vérification
+        # AGENT_DB_URL (artefact_reader) peut ne pas avoir les droits
         db_url = os.environ.get(
-            "AGENT_DB_URL",
-            "postgresql://artefact_reader:reader_password@localhost:5433/elections_db"
+            "DATABASE_URL",
+            "postgresql://artefact_user:artefact_password@db:5432/elections_db"
         )
         engine = create_engine(db_url)
 
