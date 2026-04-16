@@ -99,11 +99,6 @@ app/
 ingestion/
 └── ingest.py           # Pipeline PDF → PostgreSQL
 
-## Limitations connues
-
-- **Entity resolution SQL** : La correction automatique des typos (ex: "Tiapam" → "Tiapoum") n'est implémentée que pour la détection d'ambiguïté et le RAG, pas pour la génération SQL. Pour les requêtes SQL, utilisez l'orthographe exacte des localités.
-- **Citations/provenance** : Les réponses RAG n'indiquent pas la page ou le tableau source (nécessiterait une refonte de l'ingestion).
-
 tests/
 ├── level_1/            # Tests guardrails + intent router
 ├── level_2/            # Tests hybrid + entity + RAG
@@ -133,7 +128,7 @@ Comportement : refus avec explication et alternative sûre proposée.
 - Index vectoriel avec Gemini Embeddings + retry
 - Warmup automatique au démarrage Docker
 
-## Level 3 - Clarification + Session Memory (Partiel)
+## Level 3 - Clarification + Session Memory (Terminé)
 
 - Détection d'ambiguïté et questions de clarification
 - Stockage automatique des entités des résultats SQL
@@ -141,9 +136,9 @@ Comportement : refus avec explication et alternative sûre proposée.
 
 ## Limitations connues
 
-- L'index RAG est reconstruit à chaque démarrage (pas de persistance)
-- Premier démarrage lent (~4 min) à cause de l'ingestion + warmup
-- Fallback MD5 sur les embeddings si Gemini API indisponible
+- **Entity resolution SQL** : La correction automatique des typos n'est implémentée que pour la détection d'ambiguïté et le RAG, pas pour la génération SQL (risque de faux positifs).
+- **Citations/provenance** : Les réponses RAG n'indiquent pas la page ou le tableau source (nécessiterait une refonte de l'ingestion).
+- Premier démarrage lent (~4 min) à cause de l'ingestion initiale + warmup RAG.
 
 ## Développement local
 
