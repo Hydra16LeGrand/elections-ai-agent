@@ -485,7 +485,6 @@ def render_sidebar():
         # Questions SQL (données précises)
         st.markdown("**📊 Analytiques (chiffres précis):**")
         sql_examples = [
-            "Quel est le candidat qui a gagné à Abidjan ?",
             "Quels sont les partis avec le plus de sièges ?",
             "Montre-moi le taux de participation par région",
             "Combien de bulletins nuls ont été enregistrés ?",

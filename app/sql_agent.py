@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, text
 from ollama import Client
 from dotenv import load_dotenv
 
-from .hybrid_router import route_with_fallback, classify_question
+from .hybrid_router import route_with_fallback
 from .entity_resolver import EntityResolver, get_resolver
 
 load_dotenv()

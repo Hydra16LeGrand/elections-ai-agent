@@ -1,12 +1,14 @@
 """Module de résolution d'entités avec fuzzy matching."""
 
 import os
+import logging
 from typing import Optional, List, Tuple
 from thefuzz import fuzz, process
 from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 
 class EntityResolver:
@@ -62,7 +64,7 @@ class EntityResolver:
                 self._candidates = [row[0] for row in result if row[0]]
 
         except Exception as e:
-            print(f"Warning: Impossible de charger les entités: {e}")
+            logger.warning(f"Impossible de charger les entités: {e}")
             self._regions = []
             self._localities = []
             self._locality_words = {}
