@@ -19,7 +19,7 @@ Chatbot pour interroger les résultats des élections locales ivoiriennes via un
                                          └─────────────┘
 ```
 
-**Stack** : Python, Streamlit, PostgreSQL, LlamaIndex, Ollama, Gemini
+**Stack** : Python, Streamlit, PostgreSQL, LlamaIndex, Ollama Cloud, Gemini
 
 ## Prérequis
 
@@ -172,4 +172,20 @@ pytest tests/level_3/
 
 ---
 
+## Technologies détaillées
+
+| Composant | Technologie | Justification |
+|-----------|-------------|---------------|
+| LLM | [Ollama Cloud](https://ollama.com) (Qwen3 Coder) | Alternative managée à OpenAI/Gemini, peu connue du public |
+| Embeddings | [Gemini API](https://aistudio.google.com) | Multilingue français, free tier généreux |
+| RAG Framework | LlamaIndex | Persistence disque native pour le warmup Docker |
+| Fuzzy Matching | thefuzz | Correction des typos utilisateur (Tiapam → Tiapoum) |
+| Visualisation | pgAdmin | Interface GUI pour explorer les données sans SQL |
+
+## Crédits
+
 Projet développé pour le test technique Artefact.
+
+**Claude Code** a été utilisé pour structurer le code, corriger des bugs et rédiger la documentation. L'architecture et la logique métier ont été réalisées manuellement.
+
+Pour les détails techniques complets (choix technologiques, architecture, sécurité, limitations), voir **[LIVRABLES.md](./LIVRABLES.md)**.
