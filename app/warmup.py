@@ -25,7 +25,8 @@ def warmup_rag():
 
         if engine.index is not None:
             set_rag_engine_instance(engine)
-            logger.info("Warmup: Index RAG construit et stocké avec succès")
+            engine.persist()  # Sauvegarde explicite sur disque
+            logger.info("Warmup: Index RAG construit, stocké et sauvegardé avec succès")
             return True
         else:
             logger.warning("Warmup: Index non construit, mode dégradé")

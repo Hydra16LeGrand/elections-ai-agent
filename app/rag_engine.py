@@ -10,10 +10,12 @@ from sqlalchemy import create_engine, text
 from ollama import Client
 from dotenv import load_dotenv
 
-from llama_index.core import Document, VectorStoreIndex, Settings
+from llama_index.core import Document, VectorStoreIndex, Settings, StorageContext, load_index_from_storage
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.embeddings import BaseEmbedding
 from pydantic import PrivateAttr
+
+PERSIST_DIR = "/app/rag_storage"
 
 from google import genai
 from google.genai import types
@@ -156,12 +158,44 @@ class RAGEngine:
         self.documents: List[Document] = []
         self._index_built = False
 
-        if not skip_index_build:
+        if skip_index_build:
+            # Try to load from disk first
+            self._load_from_disk()
+        else:
+            # Build from database
             try:
                 self._build_index()
             except Exception as e:
                 import logging
                 logging.error(f"Échec construction index RAG: {e}")
+
+    def _load_from_disk(self) -> bool:
+        """Charge l'index depuis le disque si disponible."""
+        import os
+        if not os.path.exists(PERSIST_DIR):
+            return False
+
+        try:
+            get_embed_model()
+            storage_context = StorageContext.from_defaults(persist_dir=PERSIST_DIR)
+            self.index = load_index_from_storage(storage_context)
+            self._index_built = True
+            print("Index RAG chargé depuis le disque")
+            return True
+        except Exception as e:
+            print(f"Impossible de charger l'index depuis le disque: {e}")
+            return False
+
+    def persist(self) -> None:
+        """Sauvegarde l'index sur le disque."""
+        if self.index and self._index_built:
+            try:
+                import os
+                os.makedirs(PERSIST_DIR, exist_ok=True)
+                self.index.storage_context.persist(persist_dir=PERSIST_DIR)
+                print(f"Index RAG sauvegardé dans {PERSIST_DIR}")
+            except Exception as e:
+                print(f"Erreur sauvegarde index: {e}")
 
     def _fetch_election_data(self) -> List[ElectionDocument]:
         """Récupère les données électorales depuis la BDD."""
@@ -300,6 +334,9 @@ class RAGEngine:
             self.index = VectorStoreIndex(nodes)
             self._index_built = True
             print("Index RAG construit avec succès")
+
+            # Sauvegarde sur disque pour les futurs processus
+            self.persist()
         except Exception as e:
             import logging
             logging.error(f"Erreur construction index: {e}")
@@ -434,13 +471,17 @@ def set_rag_engine_instance(engine: RAGEngine):
 def get_rag_engine() -> RAGEngine:
     """
     Retourne l'instance singleton du moteur RAG (thread-safe).
-    Lazy loading: l'index est construit à la première utilisation.
+    Essaie d'abord de charger depuis le disque (construit par warmup).
     """
     global _rag_engine_instance
     if _rag_engine_instance is None:
         with _rag_engine_lock:
             if _rag_engine_instance is None:
-                _rag_engine_instance = RAGEngine(skip_index_build=False)
+                # Try loading from disk first (built by warmup)
+                _rag_engine_instance = RAGEngine(skip_index_build=True)
+                # If not on disk, build from scratch
+                if not _rag_engine_instance._index_built:
+                    _rag_engine_instance = RAGEngine(skip_index_build=False)
     return _rag_engine_instance
 
 
