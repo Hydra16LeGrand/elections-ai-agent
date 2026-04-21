@@ -1,0 +1,156 @@
+[
+  {
+    "id": "fact_001",
+    "type": "fact_lookup",
+    "question": "Qui a gagné à Tiapoum ?",
+    "expected_answer": "SANGARE ISSA",
+    "expected_party": "INDEPENDANT",
+    "tolerance": null,
+    "source": "vw_winners: NOE, NOUAMOU ET TIAPOUM, COMMUNES ET SOUS- PREFECTURES"
+  },
+  {
+    "id": "fact_002",
+    "type": "fact_lookup",
+    "question": "Quel est le candidat élu à Abengourou ?",
+    "expected_answer": "COULIBALY HENRI",
+    "expected_party": "RHDP",
+    "tolerance": null,
+    "source": "vw_winners: ABENGOUROU, COMMUNE"
+  },
+  {
+    "id": "fact_003",
+    "type": "fact_lookup",
+    "question": "Quel parti a remporté la circonscription de Koumassi ?",
+    "expected_answer": "RHDP",
+    "expected_party": null,
+    "tolerance": null,
+    "source": "vw_winners: KOUMASSI, COMMUNE"
+  },
+  {
+    "id": "fact_004",
+    "type": "fact_lookup",
+    "question": "Qui est le député de Treichville ?",
+    "expected_answer": "KAMARA AMINATA EPSE TOUNGARA",
+    "expected_party": "RHDP",
+    "tolerance": null,
+    "source": "vw_winners: TREICHVILLE, COMMUNE"
+  },
+  {
+    "id": "fact_005",
+    "type": "fact_lookup",
+    "question": "Quel candidat a été élu à Yopougon ?",
+    "expected_answer": "UNE COTE DIVOIRE EN PAIX, PROSPERE ET SOLIDAIRE",
+    "expected_party": "RHDP",
+    "tolerance": null,
+    "source": "vw_winners: YOPOUGON,COMMUNE"
+  },
+  {
+    "id": "fact_006",
+    "type": "fact_lookup",
+    "question": "Quel parti a gagné à Bouaké ?",
+    "expected_answer": "RHDP",
+    "expected_party": null,
+    "tolerance": null,
+    "source": "vw_winners: BOUAKE, COMMUNE"
+  },
+  {
+    "id": "fact_007",
+    "type": "fact_lookup",
+    "question": "Qui est le député de Daloa ?",
+    "expected_answer": "DOGBO KOFFI",
+    "expected_party": "RHDP",
+    "tolerance": null,
+    "source": "vw_winners: DALOA, COMMUNE"
+  },
+  {
+    "id": "fact_008",
+    "type": "fact_lookup",
+    "question": "Quel parti a remporté San-Pedro ?",
+    "expected_answer": "RHDP",
+    "expected_party": null,
+    "tolerance": null,
+    "source": "vw_winners: SAN-PEDRO, COMMUNE"
+  },
+  {
+    "id": "fact_009",
+    "type": "fact_lookup",
+    "question": "Quel est le candidat élu à Divo ?",
+    "expected_answer": "KONE LOSSENI",
+    "expected_party": "RHDP",
+    "tolerance": null,
+    "source": "vw_winners: DIVO, COMMUNE"
+  },
+  {
+    "id": "fact_010",
+    "type": "fact_lookup",
+    "question": "Qui a gagné à Korhogo ?",
+    "expected_answer": "SORO KANAGUI",
+    "expected_party": "RHDP",
+    "tolerance": null,
+    "source": "vw_winners: KORHOGO, COMMUNE"
+  },
+  {
+    "id": "agg_001",
+    "type": "aggregation",
+    "question": "Combien de sièges le RHDP a-t-il remporté ?",
+    "expected_value": 155,
+    "tolerance_percent": 2,
+    "source": "COUNT(*) FROM vw_winners WHERE parti = 'RHDP'"
+  },
+  {
+    "id": "agg_002",
+    "type": "aggregation",
+    "question": "Combien de sièges le PDCI-RDA a-t-il obtenu ?",
+    "expected_value": 25,
+    "tolerance_percent": 5,
+    "source": "COUNT(*) FROM vw_winners WHERE parti = 'PDCI-RDA'"
+  },
+  {
+    "id": "agg_003",
+    "type": "aggregation",
+    "question": "Quel est le nombre total de candidats indépendants élus ?",
+    "expected_value": 22,
+    "tolerance_percent": 5,
+    "source": "COUNT(*) FROM vw_winners WHERE parti = 'INDEPENDANT'"
+  },
+  {
+    "id": "agg_004",
+    "type": "aggregation",
+    "question": "Quel est le taux de participation dans la région du Poro ?",
+    "expected_value": 79.1,
+    "tolerance_percent": 1,
+    "source": "vw_turnout: PORO region participation rate"
+  },
+  {
+    "id": "agg_005",
+    "type": "aggregation",
+    "question": "Combien y a-t-il de circonscriptions au total ?",
+    "expected_value": 204,
+    "tolerance_percent": 1,
+    "source": "COUNT(*) FROM vw_winners"
+  },
+  {
+    "id": "agg_006",
+    "type": "aggregation",
+    "question": "Combien de partis ont remporté au moins un siège ?",
+    "expected_value": 5,
+    "tolerance_percent": 0,
+    "source": "DISTINCT parti FROM vw_winners"
+  },
+  {
+    "id": "agg_007",
+    "type": "aggregation",
+    "question": "Quel est le nombre de sièges pour LE BUFFLE ?",
+    "expected_value": 1,
+    "tolerance_percent": 0,
+    "source": "COUNT(*) FROM vw_winners WHERE parti = 'LE BUFFLE'"
+  },
+  {
+    "id": "agg_008",
+    "type": "aggregation",
+    "question": "Combien de sièges le FPI a-t-il remporté ?",
+    "expected_value": 1,
+    "tolerance_percent": 0,
+    "source": "COUNT(*) FROM vw_winners WHERE parti = 'FPI'"
+  }
+]

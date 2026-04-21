@@ -102,7 +102,13 @@ ingestion/
 tests/
 ├── level_1/            # Tests guardrails + intent router
 ├── level_2/            # Tests hybrid + entity + RAG
-└── level_3/            # Tests session memory + entity ambiguity
+├── level_3/            # Tests session memory + entity ambiguity
+└── test_evaluation.py  # Tests unitaires du module d'évaluation
+
+evaluation/
+├── dataset.json        # 18 questions avec réponses attendues (validées depuis la DB)
+├── eval_runner.py      # Script principal d'évaluation
+└── metrics.py          # Fonctions de scoring
 ```
 
 ## Level 1 - SQL Agent (Terminé)
@@ -134,11 +140,18 @@ Comportement : refus avec explication et alternative sûre proposée.
 - Stockage automatique des entités des résultats SQL
 - Enrichissement des questions de suivi avec le contexte
 
-## Level 4 - Observability (Terminé)
+## Level 4 - Observability + Evaluation (Terminé)
 
+### Observability
 - Tracing end-to-end : chaque requête est tracée avec timing et métadonnées
 - Capture des étapes : intent classification, SQL generation, validation, execution, RAG retrieval
 - Export JSON pour analyse offline
+
+### Evaluation Offline
+- Suite d'évaluation avec 18 questions de référence (ground truth depuis PostgreSQL)
+- Fact lookup accuracy : match exact ou partiel des candidats/partis
+- Aggregation correctness : comparaison numérique avec tolérance (±5-15%)
+- Rapport JSON avec métriques globales et liste des échecs
 
 ### Activation du tracing
 
@@ -146,6 +159,16 @@ Le tracing est automatiquement activé. La réponse inclut maintenant un objet `
 - `metadata` : timestamp et request_id
 - `events` : toutes les étapes avec leur durée (ms)
 - `total_duration_ms` : temps total de traitement
+
+### Lancer l'évaluation
+
+```bash
+# Évaluation complète (requiert DB + LLM)
+python -m evaluation.eval_runner
+
+# Avec export du rapport
+python -m evaluation.eval_runner -o reports/eval_$(date +%Y%m%d).json
+```
 
 ## Limitations connues
 
