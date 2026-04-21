@@ -247,8 +247,8 @@ def ask_database(user_question: str, tracer: RequestTracer = None) -> dict:
                 "**Not found in the provided PDF dataset.**\n\n"
                 f"L'analyse a cherché des correspondances pour : *{user_question}* "
                 "dans les tables des candidats, des partis et des localités de l'élection ivoirienne.\n\n"
-                "💡 *Suggestion : Veuillez reformuler votre question pour interroger les résultats électoraux, "
-                "les taux de participation ou les scores des candidats.*"
+                "Suggestion : Veuillez reformuler votre question pour interroger les résultats électoraux, "
+                "les taux de participation ou les scores des candidats."
             ),
             "data": [], "sql": "",
             "trace": tracer.to_dict()
@@ -260,9 +260,9 @@ def ask_database(user_question: str, tracer: RequestTracer = None) -> dict:
         return {
             "status": "error",
             "narrative": (
-                "🚨 **Demande refusée pour des raisons de sécurité.**\n"
+                "**Demande refusée pour des raisons de sécurité.**\n"
                 "La requête enfreint les règles d'accès au système (tentative d'altération, d'exfiltration massive ou contournement des Guardrails).\n\n"
-                "💡 *Alternative sûre : Vous pouvez demander 'Affiche-moi le top 10 des résultats nationaux' et le système appliquera automatiquement les limites autorisées.*"
+                "Alternative sûre : Vous pouvez demander 'Affiche-moi le top 10 des résultats nationaux' et le système appliquera automatiquement les limites autorisées."
             ),
             "data": [], "sql": "",
             "trace": tracer.to_dict()

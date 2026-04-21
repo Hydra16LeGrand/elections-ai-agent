@@ -335,9 +335,7 @@ def render_chart(data: list, chart_type: str, question: str, sql: str = "") -> N
                 render_data_table(df)
 
 
-# =============================================================================
-# FONCTION DE RENDU D'UN MESSAGE DU BOT
-# =============================================================================
+# Affichage des réponses du bot
 
 def handle_entity_clarification(response: dict, question: str) -> None:
     """
@@ -450,9 +448,7 @@ def render_bot_response(response: dict, question: str) -> None:
         handle_entity_clarification(response, question)
 
 
-# =============================================================================
-# CONFIGURATION DE LA PAGE
-# =============================================================================
+# Configuration Streamlit
 
 def setup_page_config():
     """Configure les paramètres de la page Streamlit."""
@@ -464,9 +460,7 @@ def setup_page_config():
     )
 
 
-# =============================================================================
-# SIDEBAR
-# =============================================================================
+# Sidebar avec exemples
 
 def render_sidebar():
     """Affiche la barre latérale avec informations et exemples."""
@@ -515,9 +509,7 @@ def render_sidebar():
         st.caption("v1.0 - Développé pour Artefact")
 
 
-# =============================================================================
-# INITIALISATION DE L'HISTORIQUE
-# =============================================================================
+# Historique de conversation
 
 def init_chat_history():
     """Initialise l'historique des messages dans session_state."""
@@ -548,9 +540,7 @@ Posez votre question ci-dessous ou utilisez les exemples dans la barre latérale
         st.session_state.messages.append(welcome_message)
 
 
-# =============================================================================
-# AFFICHAGE DE L'HISTORIQUE
-# =============================================================================
+# Rendu de l'historique
 
 def render_chat_history():
     """Affiche tous les messages de l'historique de conversation."""
@@ -562,9 +552,7 @@ def render_chat_history():
                 render_bot_response(message["content"], message.get("question", ""))
 
 
-# =============================================================================
-# GESTION DE LA QUESTION UTILISATEUR
-# =============================================================================
+# Traitement des questions
 
 def _store_entities_from_results(data: list) -> None:
     """Extrait et stocke les entités (région, localité) des résultats SQL."""
@@ -684,9 +672,7 @@ def handle_user_input(prompt: str):
                 })
 
 
-# =============================================================================
-# POINT D'ENTRÉE PRINCIPAL
-# =============================================================================
+# Point d'entrée
 
 def main():
     """

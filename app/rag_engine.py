@@ -452,10 +452,7 @@ INSTRUCTIONS:
 RÉPONSE:"""
 
 
-# =============================================================================
-# SINGLETON INSTANCE (Thread-safe with lock)
-# =============================================================================
-
+# Singleton thread-safe pour le RAG
 import threading
 _rag_engine_lock = threading.Lock()
 _rag_engine_instance: Optional[RAGEngine] = None
@@ -491,9 +488,7 @@ def query_rag(question: str) -> Dict:
     return engine.query(question)
 
 
-# =============================================================================
 # BLOC DE TEST
-# =============================================================================
 
 if __name__ == "__main__":
     print("=== Test RAG Engine (Resilient) ===")

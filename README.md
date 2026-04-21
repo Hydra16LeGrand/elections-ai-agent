@@ -91,9 +91,12 @@ Le système détecte automatiquement s'il doit utiliser SQL (chiffres précis) o
 ```
 app/
 ├── sql_agent.py        # Orchestrateur principal (SQL + hybrid)
-├── hybrid_router.py    # Décision SQL vs RAG
+├── hybrid_router.py    # Décision SQL vs RAG + clarification
 ├── entity_resolver.py  # Correction typos (Tiapam → Tiapoum)
-├── rag_engine.py       # Index et recherche vectorielle
+├── rag_engine.py       # Index vectoriel avec LlamaIndex
+├── session_memory.py   # Stockage contexte session
+├── observability.py     # Tracing end-to-end (Level 4)
+├── warmup.py           # Pré-construction index RAG au démarrage
 └── ui.py               # Interface Streamlit
 
 ingestion/
@@ -103,12 +106,15 @@ tests/
 ├── level_1/            # Tests guardrails + intent router
 ├── level_2/            # Tests hybrid + entity + RAG
 ├── level_3/            # Tests session memory + entity ambiguity
-└── test_evaluation.py  # Tests unitaires du module d'évaluation
+└── test_evaluation.py  # Tests module d'évaluation
 
 evaluation/
-├── dataset.json        # 18 questions avec réponses attendues (validées depuis la DB)
+├── dataset.json        # 18 questions avec ground truth
 ├── eval_runner.py      # Script principal d'évaluation
 └── metrics.py          # Fonctions de scoring
+
+initdb/
+└── 01_init.sql         # Schéma et vues PostgreSQL
 ```
 
 ## Level 1 - SQL Agent (Terminé)
