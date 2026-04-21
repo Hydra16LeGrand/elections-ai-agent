@@ -134,6 +134,19 @@ Comportement : refus avec explication et alternative sûre proposée.
 - Stockage automatique des entités des résultats SQL
 - Enrichissement des questions de suivi avec le contexte
 
+## Level 4 - Observability (Terminé)
+
+- Tracing end-to-end : chaque requête est tracée avec timing et métadonnées
+- Capture des étapes : intent classification, SQL generation, validation, execution, RAG retrieval
+- Export JSON pour analyse offline
+
+### Activation du tracing
+
+Le tracing est automatiquement activé. La réponse inclut maintenant un objet `trace` contenant :
+- `metadata` : timestamp et request_id
+- `events` : toutes les étapes avec leur durée (ms)
+- `total_duration_ms` : temps total de traitement
+
 ## Limitations connues
 
 - **Entity resolution SQL** : La correction automatique des typos n'est implémentée que pour la détection d'ambiguïté et le RAG, pas pour la génération SQL (risque de faux positifs).
