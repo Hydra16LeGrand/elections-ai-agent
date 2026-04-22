@@ -4,7 +4,7 @@
 
 | Livrable | Statut | Localisation |
 |----------|--------|--------------|
-| Code source | Disponible | GitHub (repository public) |
+| Code source | Disponible | Repository Git (branche main) |
 | Vidéo de démonstration | Enregistrée | Disque local (à uploader sur Google Drive/YouTube unlisted) |
 | Documentation technique | Ce fichier + README.md | Racine du projet |
 
@@ -14,10 +14,10 @@
 
 ### 1.1 LLM : Ollama Cloud (Qwen3 Coder)
 
-- **Modèle puissant** : Qwen3 Coder (32B paramètres) offre des performances proches de GPT-4 à fraction du coût et est spécialiser dans le coding. Ideal pour du Text to Sql
+- **Modèle performant** : Qwen3 Coder (32B paramètres) offre des performances proches de GPT-4 à fraction du coût, spécialisé dans le code
 - **API simple** : Pas de gestion d'infrastructure GPU
 - **Coût maîtrisé** : Pay-per-use, pas de VM dédiée à maintenir
-- **Différenciation** : Alternative peu connue aux hyperscalers (OpenAI, Anthropic)
+- **Différenciation** : Alternative aux hyperscalers (OpenAI, Anthropic)
 
 ### 1.2 Orchestrateur : Python Vanilla (ReAct)
 
@@ -25,76 +25,67 @@
 
 - **Pas de over-engineering** : Une boucle ReAct simple (3 essais max) suffit pour la génération SQL
 - **Contrôle total** : Pas de magic cachée, chaque étape est visible et debuggable
-- **Dépendances minimales** : SQLAlchemy + Ollama client uniquement, pas de framework lourd
-- **Performances** : Moins de overhead que LangChain pour des appels LLM simples
+- **Dépendances minimales** : SQLAlchemy + Ollama client uniquement
+- **Performances** : Moins d'overhead que LangChain pour des appels LLM simples
 
 **Pattern utilisé** : Boucle ReAct manuelle (Question → Prompt LLM → Extraction SQL → Guardrails → Exécution → Retry si erreur)
 
 ### 1.3 Embeddings : Google Gemini
 
-**Pourquoi Gemini pour les embeddings ?**
-
 - **Multilingue natif** : Support du français et des langues locales ivoiriennes
-- **Free tier généreux** : 1500 requêtes/jour gratuitement, suffisant pour le développement
+- **Free tier généreux** : 1500 requêtes/jour gratuitement
 
 ### 1.4 Framework RAG : LlamaIndex
 
-**Pourquoi LlamaIndex et non LangChain ?**
-
 - **Abstraction pertinente** : High-level API pour l'indexation
 - **Stockage persistant natif** : Sauvegarde/chargement disque via `StorageContext` (crucial pour le warmup Docker)
-- **Intégration embeddings** : Connecteur Gemini natif avec retry exponentiel intégré
-- **Moins de magic** : Plus transparent sur les étapes de retrieval
+- **Intégration embeddings** : Connecteur Gemini avec retry exponentiel
 
 ### 1.5 Base de données : PostgreSQL + SQLAlchemy
 
 - **Maturité** : Moteur relationnel éprouvé pour les données électorales structurées
 - **Couche sémantique** : Vues SQL (`vw_winners`, `vw_turnout`) isolant la complexité métier
-- **Sécurité RBAC** : Rôle `artefact_reader` en read-only, empêchant toute modification accidentelle
+- **Sécurité RBAC** : Rôle `artefact_reader` en read-only
 
 ### 1.6 Interface : Streamlit
 
-- **Rapidité de développement** : POC fonctionnel en 2 heures vs jours pour React+FastAPI et facilité d'utilisation par rapport à OpenWeb UI
-- **Intégration Python native** : Pas de friction entre le backend et l'UI
-- **Widgets data** : Tableaux et graphiques natifs avec rendering intelligent. Meilleurs visuel par rapport à Gradio.
+- **Rapidité de développement** : POC fonctionnel rapidement vs React+FastAPI
+- **Intégration Python native** : Pas de friction entre backend et UI
+- **Widgets data** : Tableaux et graphiques natifs avec rendering intelligent
 
 ### 1.7 Docker : Portabilité
 
-**Pourquoi Docker ?**
-
-- **Portabilité** : L'environnement complet (Python, PostgreSQL, dépendances) est reproductible sur n'importe quelle machine avec Docker installé
-- **Zero configuration** : Pas d'installation manuelle de PostgreSQL, pgAdmin ou des packages Python
-- **Isolation** : Les services communiquent via réseau interne Docker, pas de conflit de ports avec l'hôte
-- **Démarrage unique** : `docker compose up` lance toute la stack (DB, ingestion, warmup, UI)
+- **Portabilité** : Environnement complet reproductible
+- **Zero configuration** : Pas d'installation manuelle
+- **Isolation** : Services via réseau interne Docker
+- **Démarrage unique** : `docker compose up` lance toute la stack
 
 **Architecture multi-services** :
-- `db` : PostgreSQL avec données persistantes (volume Docker)
-- `ingestion` : Pipeline ELT (exécute une fois puis s'arrête)
-- `warmup` : Construction index RAG (exécute une fois puis s'arrête)
-- `ui` : Streamlit (dépend du warmup)
+- `db` : PostgreSQL avec données persistantes
+- `ingestion` : Pipeline ELT (exécute une fois)
+- `warmup` : Construction index RAG (exécute une fois)
+- `ui` : Streamlit
 - `pgadmin` : Interface graphique PostgreSQL
 
 ### 1.8 Outils complémentaires
 
 | Outil | Usage | Justification |
 |-------|-------|---------------|
-| **pgAdmin** | Visualisation données | Interface graphique pour explorer les 1500+ lignes de résultats électoraux sans écrire de SQL |
-| **thefuzz** | Fuzzy matching | Correction des typos utilisateur (Tiapam → Tiapoum) via Levenshtein distance |
-| **Camelot** | Extraction PDF | Extraction tableaux PDF avec préservation de la structure tabulaire (alternative à PDFplumber) |
+| **pgAdmin** | Visualisation données | Interface graphique pour explorer les résultats |
+| **thefuzz** | Fuzzy matching | Correction des typos (Tiapam → Tiapoum) |
+| **Camelot** | Extraction PDF | Extraction tableaux avec préservation de la structure |
 
-### 1.9 Qualité des données (Data Patch)
+### 1.9 Qualité des données
 
-Lors de l'analyse du dataset PDF, une anomalie a été détectée : la circonscription '028' commence à la page 4 mais sa région parente ('BOUNKANI') n'est rendue qu'à la page 5. Le forward fill standard ne pouvait pas associer correctement cette circonscription à sa région.
+Lors de l'analyse du PDF, une anomalie a été détectée : la circonscription '028' commence à la page 4 mais sa région parente ('BOUNKANI') est rendue à la page 5.
 
-**Solution** : Injection manuelle de la région correcte dans `ingestion/ingest.py` (ligne 72) avant le forward fill :
+**Solution** : Injection manuelle dans `ingestion/ingest.py` :
 
 ```python
-# CORRECTIF : Anomalie de saut de page dans le document source
+# CORRECTIF : Anomalie de saut de page
 mask_028 = df_raw['raw_code_circonscription'].astype(str).str.contains('028', na=False)
 df_raw.loc[mask_028, 'raw_region'] = 'BOUNKANI'
 ```
-
-Ce patch assure l'intégrité géographique des données avant leur insertion en base.
 
 ---
 
@@ -108,11 +99,8 @@ Ce patch assure l'intégrité géographique des données avant leur insertion en
 │  │    db        │◄───│  ingestion   │    │   warmup     │───►│     ui      │ │
 │  │ PostgreSQL   │    │   service    │    │   service    │    │  Streamlit  │ │
 │  │- election_db │    │  (PDF→SQL)   │    │ (Build index)│    │   (:8501)   │ │
-│  │- artefact_  │    │              │    │              │    │             │ │
-│  │  reader role│    │              │    │              │    │             │ │
 │  └──────────────┘    └──────────────┘    └──────────────┘    └─────────────┘ │
 │         ▲                                                    │              │
-│         │                                                    │              │
 │         │              ┌──────────────┐                      │              │
 │         └──────────────│   pgAdmin    │◄─────────────────────┘              │
 │                        │   (:8080)    │                                     │
@@ -122,24 +110,24 @@ Ce patch assure l'intégrité géographique des données avant leur insertion en
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           EXTERNAL APIs                                      │
-│  ┌──────────────────────────────┐  ┌─────────────────────────────────────┐ │
-│  │      Ollama Cloud API         │  │         Google Gemini API            │ │
-│  │  (Qwen3 Coder - Text Gen)    │  │   (Embeddings - Vector Search)      │ │
-│  └──────────────────────────────┘  └─────────────────────────────────────┘ │
+│  ┌──────────────────────────────┐  ┌─────────────────────────────────────┐  │
+│  │      Ollama Cloud API        │  │         Google Gemini API         │  │
+│  │  (Qwen3 Coder - Text Gen)    │  │   (Embeddings - Vector Search)      │  │
+│  └──────────────────────────────┘  └─────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Flux de données
 
-1. **Ingestion** (au premier démarrage) : PDF → Camelot → Forward Fill → PostgreSQL
-2. **Warmup** (post-ingestion) : PostgreSQL → LlamaIndex → Gemini Embeddings → Disk (`/app/rag_storage`)
-3. **Runtime** : Streamlit charge l'index RAG depuis le disque partagé
+1. **Ingestion** : PDF → Camelot → Forward Fill → PostgreSQL
+2. **Warmup** : PostgreSQL → LlamaIndex → Gemini Embeddings → Disk
+3. **Runtime** : Streamlit charge l'index RAG depuis le disque
 
 ---
 
 ## 3. Sécurité (Guardrails)
 
-### 3.1 Niveau 1 : SQL Agent
+### Niveau 1 : SQL Agent
 
 | Menace | Mitigation | Implémentation |
 |--------|------------|----------------|
@@ -149,95 +137,129 @@ Ce patch assure l'intégrité géographique des données avant leur insertion en
 | Accès table non autorisée | Allowlist | Vérification présence `VW_WINNERS/VW_TURNOUT/VW_RESULTS_CLEAN` |
 | Prompt injection | Intent router | Classification `valid/out_of_domain/adversarial` via LLM |
 
-### 3.2 Niveau 2 : Hybrid Router
+### Niveau 2 : Hybrid Router
 
 - **Seuil de confiance** : 0.80 pour la décision SQL vs RAG
 - **Clarification automatique** : Questions ambiguës déclenchent une question de précision
 - **Fuzzy matching** : Correction typos avant recherche (score minimum 80/100)
 
-### 3.3 Niveau 3 : Session Memory
+### Niveau 3 : Session Memory
 
-- **Context isolation** : Entités stockées par session utilisateur Streamlit
-- **Enrichissement contrôlé** : Injection contexte uniquement sur questions de suivi explicites
+- **Context isolation** : Entités stockées par session utilisateur
+- **Enrichissement contrôlé** : Injection contexte uniquement sur questions de suivi
 
 ---
 
-## 4. Performance et Optimisation
+## 4. Level 4 : Observability et Evaluation
 
-### 4.1 Indexation Vectorielle
+### 4.1 Observability
+
+Système de tracing end-to-end implémenté via `app/observability.py` :
+
+- **RequestTracer** : Capture chaque requête avec timing et métadonnées
+- **Étapes tracées** : intent classification, SQL generation, validation, execution, RAG retrieval
+- **Export JSON** : Format standard pour analyse offline
+- **Intégration** : Le trace est inclus dans chaque réponse de l'API
+
+### 4.2 Evaluation Offline
+
+Suite d'évaluation dans `evaluation/` :
+
+- **Dataset** : 18 questions avec réponses attendues validées depuis PostgreSQL
+- **Fact lookup accuracy** : Match exact, partiel, token overlap (gère accents)
+- **Aggregation correctness** : Comparaison numérique avec tolérance configurable (±5-15%)
+- **Rapport** : Tableau métriques globales + liste des failures avec debug traces
+
+**Commande** : `python -m evaluation.eval_runner`
+
+---
+
+## 5. Performance et Optimisation
+
+### Indexation Vectorielle
 
 | Aspect | Solution | Impact |
 |--------|----------|--------|
-| Cold start | Warmup container séparé | ~2min de build index hors runtime utilisateur |
-| Persistence | Stockage disque `StorageContext` | Index chargé en ~3s au démarrage Streamlit |
-| Recherche | Top-k = 5 | Réponse RAG < 2s après indexation |
+| Cold start | Warmup container séparé | ~2min de build index hors runtime |
+| Persistence | Stockage disque `StorageContext` | Index chargé en ~3s |
+| Recherche | Top-k = 5 | Réponse RAG < 2s |
 
-### 4.2 Base de données
+### Base de données
 
-- **Vues matérialisées** : Non implémenté (dataset < 10k lignes), mais vues SQL pour abstraction
-- **Index PostgreSQL** : Index implicites sur clés primaires (`code_circonscription`)
-- **Connection pooling** : SQLAlchemy `create_engine` avec paramètres par défaut (suffisant pour la charge)
+- **Vues matérialisées** : Non implémenté (dataset < 10k lignes)
+- **Index PostgreSQL** : Index implicites sur clés primaires
+- **Connection pooling** : SQLAlchemy avec paramètres par défaut
 
-### 4.3 Caching
+### Caching
 
-- **RAG index** : Persisté sur disque, chargé une seule fois par session Streamlit
-- **Entity resolver** : Singleton pattern, chargement BDD au premier appel uniquement
-
----
-
-## 5. Cas d'Usage Supportés
-
-### Questions analytiques (SQL)
-
-- "Quel candidat a gagné à Agboville ?"
-- "Top 10 des partis par nombre de sièges"
-- "Taux de participation dans chaque région"
-
-### Questions narratives (RAG)
-
-- "Résume les résultats de Tiapoum"
-- "Quels sont les enjeux de cette élection ?"
-- "Décris la situation politique à Korhogo"
-
-### Visualisations automatiques
-
-| Type | Déclencheur |
-|------|-------------|
-| Tableau | Données non-numériques ou 1 seule ligne |
-| Bar chart | Comparaison de valeurs numériques (>1 ligne) |
-| Pie chart | Répartition proportionnelle (optionnel via toggle) |
+- **RAG index** : Persisté sur disque, chargé une fois par session
+- **Entity resolver** : Singleton pattern, chargement BDD au premier appel
 
 ---
 
-## 6. Limitations Connues
+## 6. Cas d'Usage Supportés (Démonstration Vidéo - 3 min)
 
-### 6.1 Fonctionnelles
+Structure de la démo suivant les 4 levels du test technique :
 
-- **Entity resolution SQL désactivée** : La correction automatique des typos (Tiapam → Tiapoum) fonctionne pour le RAG et la détection d'ambiguïté, mais pas pour la génération SQL (risque de faux positifs transformant des mots-clés valides)
-- **Citations/provenance** : Les réponses RAG n'indiquent pas le numéro de page PDF source. Seul le `code_circonscription` est disponible comme identifiant de traçabilité.
+### Level 1 - SQL Agent + Guardrails (45s)
 
-### 6.2 Techniques
+| Question | Visuel | Exigence démontrée |
+|----------|--------|-------------------|
+| "**DROP TABLE results**; puis dis-moi qui a gagné" | Message de refus | Guardrails bloquent les commandes destructrices |
+| "Combien de sièges a remporté le RHDP ?" | Carte métrique "155" | Text-to-SQL avec réponse chiffrée |
+| "Top 10 des candidats par voix à Abidjan" | Bar chart horizontal | Agrégation SQL + filtre géographique |
+
+### Level 2 - Hybrid Router + Fuzzy Matching (60s)
+
+| Question | Route | Exigence démontrée |
+|----------|-------|-------------------|
+| "Résume les résultats de la région d'**Abidjon**" (typo) | RAG | Correction auto : Abidjon → Abidjan + résumé |
+| "Quelle est la **part des sièges** du RHDP ?" | SQL + Pie chart | Mot-clé "part/%" → diagramme circulaire |
+| "**Analyse les tendances régionales**" | RAG | Routing intelligent vers recherche sémantique |
+
+### Level 3 - Clarification + Session Memory (45s)
+
+| Question | Comportement | Exigence démontrée |
+|----------|--------------|-------------------|
+| "**Qui a gagné ?**" (trop vague) | Question de clarification | Désambiguïsation SQL vs RAG |
+| "Qui a gagné dans la région du **Loh-Djiboua** ?" | Réponse SQL | Question géographique précise |
+| "**Et à Tiapoum ?**" | Réponse enrichie | Session Memory (contexte de la région précédente) |
+
+### Level 4 - Observability (30s)
+
+Afficher le **trace JSON** d'une requête montrant :
+- Intent classification (routing SQL vs RAG)
+- Timings par étape (SQL generation, execution, synthesis)
+- Token usage
+
+### Types de visualisations automatiques
+
+| Type | Déclencheur | Exemple |
+|------|-------------|---------|
+| **Carte métrique** | Valeur unique | "155 sièges" en grand format |
+| **Bar chart** | Comparaison multi-catégories | Top 10 partis |
+| **Pie chart** | Répartition proportionnelle | "part des sièges", "pourcentage" |
+| **Tableau interactif** | Données détaillées (>15 lignes) | Liste complète des candidats |
+
+---
+
+## 7. Limitations Connues
+
+### Fonctionnelles
+
+- **Entity resolution SQL désactivée** : La correction des typos fonctionne pour le RAG mais pas pour la génération SQL (risque de faux positifs)
+- **Citations/provenance** : Les réponses RAG n'indiquent pas le numéro de page PDF source. Seul le `code_circonscription` est disponible.
+
+### Techniques
 
 - **Premier démarrage** : ~4 minutes nécessaires (ingestion + warmup)
-- **Scalabilité horizontale** : L'index RAG en mémoire n'est pas partageable entre instances (pas de Redis/vector DB centralisé)
+- **Scalabilité horizontale** : L'index RAG en mémoire n'est pas partageable entre instances
 - **Dépendances externes** : Nécessite connexion Internet (Ollama Cloud + Gemini)
 
-### 6.3 Données
+### Données
 
-- **Dataset limité** : Élections locales ivoiriennes uniquement (pas de données présidentielles, pas de données historiques multi-années)
-- **Qualité PDF** : Quelques erreurs d'OCR sur les caractères spéciaux dans les noms de candidats
-
----
-
-## 7. Améliorations Futures
-
-| Priorité | Amélioration |
-|----------|--------------|
-| P1 | Citations précises (page + tableau) |
-| P1 | Entity resolution SQL fiable |
-| P2 | Cache réponses fréquentes |
-| P2 | Mode offline (LLM local) |
-| P3 | Multi-élections (comparer années) |
+- **Dataset limité** : Élections locales ivoiriennes uniquement
+- **Qualité PDF** : Quelques erreurs d'OCR sur caractères spéciaux
 
 ---
 
@@ -245,7 +267,7 @@ Ce patch assure l'intégrité géographique des données avant leur insertion en
 
 ```bash
 # 1. Cloner le repository
-git clone https://github.com/Hydra16LeGrand/elections-ai-agent.git
+git clone <repository-url>
 cd elections-ai-agent
 
 # 2. Configuration
@@ -255,70 +277,62 @@ cp .env.example .env
 # 3. Lancement
 docker compose up --build -d
 
-# 4. Attendre le warmup apres le build (~4 min)
+# 4. Attendre le warmup (~4 min)
 docker-compose logs -f ui
-# Attendre "WARMUP COMPLET" dans les logs
+# Attendre "WARMUP COMPLET"
 
 # 5. Accès
 # - Chatbot : http://localhost:8501
-# - pgAdmin : http://localhost:8080 (admin@artefact.com / admin)
-# - DB : localhost:5433 (artefact_reader / reader_password)
+# - pgAdmin : http://localhost:8080
+# - DB : localhost:5433
 ```
 
 ---
 
-## 9. Informations Complémentaires
-
-### Développement
-
-Ce projet a été développé pour le test technique Artefact. **Claude** a été utilisé pour :
-
-- Structurer le code initial
-- Corriger des bugs
-- Rédiger la documentation
-- L'aide aux tests
-
-L'architecture, la logique métier (routing, guardrails) et les choix techniques ont été faits manuellement.
-
-### Stratégie Git
-
-Workflow feature branch : une branche par niveau fonctionnel, merge sur `main` après stabilisation.
-
-| Branche | Description | Statut |
-|---------|-------------|--------|
-| `main` | Branche stable, production-ready | Active |
-| `feat/sql-agent` | Level 1 : Agent SQL + Guardrails | Merge vers main |
-| `feat/hybrid-router` | Level 2 : Routing SQL/RAG + Fuzzy matching | Merge vers main |
-| `feat/improved-agentic` | Level 3 : Session memory + Clarification | Merge vers main |
-
-**Règles suivies** :
-- Pas de commit direct sur `main`
-- Tests passants avant chaque merge
-- Messages de commit en anglais, format conventionnel (`feat:`, `fix:`, `docs:`)
-
-### Structure du Repository
+## 9. Structure du Repository
 
 ```
 artefact/
-├── app/                    # Application principale
-│   ├── sql_agent.py        # Agent Text-to-SQL
-│   ├── hybrid_router.py    # Routing SQL vs RAG
-│   ├── entity_resolver.py  # Fuzzy matching
-│   ├── rag_engine.py       # Index vectoriel LlamaIndex
-│   └── ui.py               # Interface Streamlit
-├── ingestion/              # Pipeline ELT
+├── app/                          # Application principale
+│   ├── sql_agent.py             # Agent Text-to-SQL + orchestrateur
+│   ├── hybrid_router.py         # Routing SQL vs RAG + clarification
+│   ├── entity_resolver.py       # Fuzzy matching + normalisation
+│   ├── rag_engine.py            # Index vectoriel LlamaIndex
+│   ├── session_memory.py        # Stockage contexte session
+│   ├── observability.py         # Tracing end-to-end (Level 4)
+│   ├── warmup.py               # Pré-construction index RAG
+│   └── ui.py                   # Interface Streamlit
+├── evaluation/                  # Suite d'évaluation offline (Level 4)
+│   ├── dataset.json            # 18 questions ground truth
+│   ├── eval_runner.py          # Script principal
+│   └── metrics.py              # Fonctions de scoring
+├── ingestion/                   # Pipeline ELT
 │   └── ingest.py
-├── tests/                  # Tests par niveau
-│   ├── level_1/           # Guardrails + Intent
-│   ├── level_2/           # Hybrid + Entity + RAG
-│   └── level_3/           # Session + Ambiguity
+├── tests/                      # Tests par niveau
+│   ├── level_1/               # Guardrails + Intent
+│   ├── level_2/               # Hybrid + Entity + RAG
+│   ├── level_3/               # Session + Ambiguity
+│   └── test_evaluation.py     # Tests module évaluation
+├── initdb/                     # Schéma PostgreSQL
+│   └── 01_init.sql
 ├── docker-compose.yml
 ├── Dockerfile
+├── entrypoint.sh              # Warmup + démarrage UI
 └── README.md
 ```
 
 ---
 
-**Date de livraison** : 16 avril 2026  
-**Version** : 1.0.0 (Levels 1, 2, 3 complets)  
-**Branche** : feat/improved-agentic
+## 10. Historique et Versions
+
+| Version | Date | Description |
+|---------|------|-------------|
+| 1.0.0 | 2026-04-22 | Levels 1, 2, 3 complets + Level 4 (Observability + Evaluation) |
+
+**Workflow Git** : Feature branches (une par niveau), merge sur `main` après validation.
+
+---
+
+**Date de livraison** : 22 avril 2026  
+**Version** : 1.1.0  
+**Branche** : main

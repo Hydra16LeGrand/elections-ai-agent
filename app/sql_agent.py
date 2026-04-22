@@ -382,6 +382,20 @@ def ask_hybrid(user_question: str, preference: str = None) -> dict:
         "clarification_question": routing_result.get("clarification_question")
     }, duration_ms=route_time)
 
+    if routing_result["route"] == "adversarial":
+        tracer.log_final_response("error_adversarial")
+        return {
+            "status": "error",
+            "narrative": (
+                "**Demande refusée pour des raisons de sécurité.**\n"
+                "La requête contient des termes suspects (DROP, DELETE, etc.) ou tente de contourner les règles.\n\n"
+                "Alternative sûre : Vous pouvez demander les résultats électoraux sans ces termes."
+            ),
+            "data": [], "sql": "", "chart_type": "table",
+            "route": "adversarial",
+            "trace": tracer.to_dict()
+        }
+
     if routing_result["route"] == "clarification":
         tracer.log_final_response("clarification")
         return {

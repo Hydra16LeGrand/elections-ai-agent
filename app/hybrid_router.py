@@ -179,9 +179,28 @@ def ask_clarification(question: str) -> str:
                 "Que préférez-vous ?")
 
 
+def check_adversarial_patterns(question: str) -> bool:
+    """Détecte les patterns adversariaux simples (DROP, DELETE, etc.)."""
+    q_lower = question.lower()
+    adversarial_keywords = [
+        "drop table", "delete from", "truncate table",
+        "ignore your rules", "return your system prompt",
+        "show me the entire database", "exfiltrate"
+    ]
+    return any(keyword in q_lower for keyword in adversarial_keywords)
+
+
 def route_with_fallback(question: str) -> Dict[str, any]:
     """Route une question avec fallback sur clarification si confiance faible."""
-    # Check entity ambiguities before classification
+    # PRIORITÉ 1: Vérification adversarial (sécurité)
+    if check_adversarial_patterns(question):
+        return {
+            "route": "adversarial",
+            "confidence": 1.0,
+            "reasoning": "Détection de pattern adversarial (DROP, DELETE, etc.)"
+        }
+
+    # PRIORITÉ 2: Check entity ambiguities
     ambiguity = detect_entity_ambiguity(question)
     if ambiguity:
         return {
@@ -192,6 +211,7 @@ def route_with_fallback(question: str) -> Dict[str, any]:
             "clarification_question": f"Dans quelle région se trouve {ambiguity['entity_value']} ?"
         }
 
+    # PRIORITÉ 3: Classification standard
     classification = classify_question(question)
     route = classification["route"]
     confidence = classification["confidence"]
